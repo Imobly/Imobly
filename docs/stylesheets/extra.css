@@ -1,0 +1,178 @@
+/* Custom styles for Imobly Documentation */
+
+:root {
+  --md-primary-fg-color: #1976d2;
+  --md-primary-fg-color--light: #42a5f5;
+  --md-primary-fg-color--dark: #0d47a1;
+  --md-accent-fg-color: #ff5722;
+}
+
+/* Custom cards styling */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.grid.cards > * {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  background: var(--md-default-bg-color);
+  transition: all 0.2s ease;
+}
+
+.grid.cards > *:hover {
+  border-color: var(--md-primary-fg-color);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] .grid.cards > * {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--md-code-bg-color);
+}
+
+[data-md-color-scheme="slate"] .grid.cards > *:hover {
+  border-color: var(--md-primary-fg-color);
+}
+
+/* Custom admonitions */
+.md-typeset .admonition.success {
+  border-color: #4caf50;
+}
+
+.md-typeset .admonition.success > .admonition-title {
+  background-color: rgba(76, 175, 80, 0.1);
+  border-color: #4caf50;
+}
+
+/* Logo and branding */
+.md-header__title {
+  font-weight: 700;
+}
+
+/* Code blocks improvements */
+.md-typeset pre > code {
+  line-height: 1.5;
+}
+
+/* Navigation improvements */
+.md-nav__item--active > .md-nav__link {
+  font-weight: 600;
+}
+
+/* Tables */
+.md-typeset table:not([class]) {
+  font-size: 0.9rem;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-primary-fg-color);
+  color: white;
+  font-weight: 600;
+}
+
+/* Responsive improvements */
+@media screen and (max-width: 768px) {
+  .grid.cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Custom icons */
+.twemoji {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+/* Status badges */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.25rem;
+}
+
+.badge.success {
+  color: #fff;
+  background-color: #28a745;
+}
+
+.badge.warning {
+  color: #212529;
+  background-color: #ffc107;
+}
+
+.badge.danger {
+  color: #fff;
+  background-color: #dc3545;
+}
+
+/* API endpoint styling */
+.endpoint {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-left: 4px solid var(--md-primary-fg-color);
+  background: rgba(25, 118, 210, 0.05);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.endpoint .method {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  margin-right: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+}
+
+.endpoint .method.get {
+  background: #61affe;
+  color: white;
+}
+
+.endpoint .method.post {
+  background: #49cc90;
+  color: white;
+}
+
+.endpoint .method.put {
+  background: #fca130;
+  color: white;
+}
+
+.endpoint .method.delete {
+  background: #f93e3e;
+  color: white;
+}
+
+/* Mermaid diagrams */
+.mermaid {
+  text-align: center;
+  margin: 2rem 0;
+}
+
+/* Custom footer */
+.md-footer-meta {
+  background-color: var(--md-primary-fg-color--dark);
+}
+
+/* Search improvements */
+.md-search__form {
+  border-radius: 2rem;
+}
+
+/* Version selector */
+.md-version {
+  color: var(--md-primary-fg-color);
+  font-weight: 600;
+}

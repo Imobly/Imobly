@@ -1,0 +1,39 @@
+# Framework web
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Banco de dados
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Cache e sessões (removido - não sendo usado)
+# redis==5.0.1
+# aioredis==2.0.1
+
+# Supabase (Auth + Storage)
+supabase==2.8.0
+PyJWT==2.8.0
+
+# Validação de dados e settings
+pydantic==2.5.0
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# Upload de arquivos e utilitários
+python-multipart==0.0.6
+python-dotenv==1.0.0
+pillow==10.1.0
+python-dateutil==2.8.2
+
+# Supabase Storage (para produção)
+# supabase==2.0.0 - já incluído acima na versão 2.8.0
+
+# Desenvolvimento e testes
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx<0.25.0,>=0.24.0
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0

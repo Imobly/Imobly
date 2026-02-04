@@ -1,0 +1,126 @@
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | venv
+  | build
+  | dist
+  | migrations
+  | htmlcov
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_gitignore = false
+known_first_party = ["app"]
+known_third_party = ["fastapi", "pydantic", "sqlalchemy"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_calls = false
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.db.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.auth.security"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.dashboard.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.payments.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.expenses.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.units.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.tenants.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.properties.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.notifications.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.src.contracts.*"
+ignore_errors = true
+
+[tool.pylint.messages_control]
+max-line-length = 100
+disable = [
+    "C0103",
+    "C0111",
+    "R0903",
+    "R0913",
+    "W0621",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "parametrized: Parametrized tests",
+    "slow: Slow running tests",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

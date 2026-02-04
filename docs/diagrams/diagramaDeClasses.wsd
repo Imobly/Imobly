@@ -1,0 +1,253 @@
+@startuml DiagramaClassesImobiliario
+!theme mars
+
+title Diagrama de Classes - Modelo de Dominio Imobiliario
+
+class Property {
+    +id: int
+    +name: str
+    +address: str
+    +neighborhood: str
+    +city: str
+    +state: str
+    +zip_code: str
+    +type: PropertyType
+    +area: Decimal
+    +bedrooms: int
+    +bathrooms: int
+    +parking_spaces: int
+    +rent: Decimal
+    +status: PropertyStatus
+    +description: str
+    +images: JSON
+    +is_residential: bool
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+class Unit {
+    +id: int
+    +property_id: int
+    +unit_number: str
+    +area: Decimal
+    +bedrooms: int
+    +bathrooms: int
+    +rent: Decimal
+    +status: UnitStatus
+    +tenant: str
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+class Tenant {
+    +id: int
+    +name: str
+    +email: str
+    +phone: str
+    +cpf_cnpj: str
+    +birth_date: date
+    +profession: str
+    +income: Decimal
+    +address: str
+    +emergency_contact: JSON
+    +documents: JSON
+    +status: TenantStatus
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+class Contract {
+    +id: int
+    +title: str
+    +property_id: int
+    +unit_id: int
+    +tenant_id: int
+    +start_date: date
+    +end_date: date
+    +rent: Decimal
+    +deposit: Decimal
+    +interest_rate: Decimal
+    +fine_rate: Decimal
+    +status: ContractStatus
+    +terms: str
+    +document_url: str
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+class Payment {
+    +id: int
+    +property_id: int
+    +tenant_id: int
+    +contract_id: int
+    +due_date: date
+    +payment_date: date
+    +amount: Decimal
+    +fine_amount: Decimal
+    +total_amount: Decimal
+    +status: PaymentStatus
+    +payment_method: PaymentMethod
+    +description: str
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+class Expense {
+    +id: str
+    +property_id: int
+    +category: str
+    +type: ExpenseType
+    +description: str
+    +amount: Decimal
+    +date: date
+    +status: ExpenseStatus
+    +priority: Priority
+    +vendor: str
+    +receipt_url: str
+    +notes: str
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+class Notification {
+    +id: str
+    +title: str
+    +message: str
+    +type: NotificationType
+    +read: bool
+    +priority: Priority
+    +action_required: bool
+    +action_url: str
+    +related_type: str
+    +related_id: int
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+class Maintenance {
+    +id: int
+    +property_id: int
+    +title: str
+    +description: str
+    +priority: Priority
+    +status: MaintenanceStatus
+    +cost: Decimal
+    +scheduled_date: date
+    +completed_date: date
+    +contractor: str
+    +notes: str
+    +created_at: datetime
+    +updated_at: datetime
+}
+
+' ====================
+' ENUMS
+' ====================
+enum PropertyType {
+    APARTMENT
+    HOUSE
+    COMMERCIAL
+    STUDIO
+}
+
+enum PropertyStatus {
+    VACANT
+    OCCUPIED
+    MAINTENANCE
+    INACTIVE
+}
+
+enum UnitStatus {
+    VACANT
+    OCCUPIED
+    MAINTENANCE
+}
+
+enum TenantStatus {
+    ACTIVE
+    INACTIVE
+}
+
+enum ContractStatus {
+    ACTIVE
+    EXPIRED
+    TERMINATED
+}
+
+enum PaymentStatus {
+    PENDING
+    PAID
+    OVERDUE
+    PARTIAL
+}
+
+enum PaymentMethod {
+    CASH
+    TRANSFER
+    PIX
+    CHECK
+    CARD
+}
+
+enum ExpenseType {
+    EXPENSE
+    MAINTENANCE
+}
+
+enum ExpenseStatus {
+    PENDING
+    PAID
+    SCHEDULED
+}
+
+enum NotificationType {
+    CONTRACT_EXPIRING
+    PAYMENT_OVERDUE
+    MAINTENANCE_URGENT
+    SYSTEM_ALERT
+    REMINDER
+}
+
+enum Priority {
+    LOW
+    MEDIUM
+    HIGH
+    URGENT
+}
+
+enum MaintenanceStatus {
+    PENDING
+    IN_PROGRESS
+    COMPLETED
+    CANCELLED
+}
+
+' ====================
+' RELACIONAMENTOS ENTRE ENTIDADES
+' ====================
+Property ||--o{ Unit : contem
+Property ||--o{ Contract : possui contratos
+Property ||--o{ Payment : recebe pagamentos
+Property ||--o{ Expense : possui despesas
+Property ||--o{ Maintenance : requer
+Unit ||--o{ Contract : alugada por
+Tenant ||--o{ Contract : assina
+Tenant ||--o{ Payment : efetua pagamentos
+Contract ||--o{ Payment : gera
+
+' Relacionamentos com Enums
+Property ||-- PropertyType
+Property ||-- PropertyStatus
+Unit ||-- UnitStatus
+Tenant ||-- TenantStatus
+Contract ||-- ContractStatus
+Payment ||-- PaymentStatus
+Payment ||-- PaymentMethod
+Expense ||-- ExpenseType
+Expense ||-- ExpenseStatus
+Notification ||-- NotificationType
+Notification ||-- Priority
+Maintenance ||-- Priority
+Maintenance ||-- MaintenanceStatus
+
+@enduml

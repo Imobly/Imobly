@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (Local Development)
+  db:
+    image: postgres:15-alpine
+    container_name: imobly-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: imobly_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - imobly-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend - FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: imobly-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/imobly_dev}
+      ENVIRONMENT: development
+      DEBUG: "True"
+      
+      # Supabase
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      
+      # Storage
+      STORAGE_MODE: ${STORAGE_MODE:-supabase}
+      SUPABASE_PROPERTY_IMAGES_BUCKET: ${SUPABASE_PROPERTY_IMAGES_BUCKET:-property-images}
+      SUPABASE_TENANT_DOCUMENTS_BUCKET: ${SUPABASE_TENANT_DOCUMENTS_BUCKET:-tenant-documents}
+      SUPABASE_EXPENSE_DOCUMENTS_BUCKET: ${SUPABASE_EXPENSE_DOCUMENTS_BUCKET:-expense-documents}
+      
+      # CORS
+      BACKEND_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - imobly-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Frontend - Next.js
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: imobly-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Supabase (público)
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-${SUPABASE_URL}}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY}}
+      
+      # API Backend
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      
+      # Modo de desenvolvimento
+      NODE_ENV: development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - imobly-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+networks:
+  imobly-network:
+    driver: bridge

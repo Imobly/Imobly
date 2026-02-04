@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: imobly-backend
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        sync: false  # Configure manualmente no Render Dashboard
+      - key: SECRET_KEY
+        sync: false  # ⚠️ IMPORTANTE: Mesma chave do Auth-API para validar JWT
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: PROJECT_NAME
+        value: Imóvel Gestão API
+      - key: VERSION
+        value: 1.0.0
+      - key: API_V1_STR
+        value: /api/v1
+      - key: HOST
+        value: 0.0.0.0
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+
+# ⚠️ IMPORTANTE: Configure estas variáveis MANUALMENTE no Render Dashboard:
+# 
+# DATABASE_URL: postgresql://postgres.yyeldattafklyutbbnhu:[SUA_SENHA]@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+# 
+# SECRET_KEY: DEVE SER A MESMA nos dois serviços (Backend + Auth-API)
+# 1. Vá no Render Dashboard do Backend que já está rodando
+# 2. Environment → Copie o valor da SECRET_KEY
+# 3. Use essa MESMA chave no Auth-API
+#
+# Database hospedado no Supabase - não precisa criar no Render
