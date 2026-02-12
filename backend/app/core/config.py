@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     # Redis Settings (desabilitado - não sendo usado)
     # REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
+    # Supabase Settings
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")  # Anon key
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", os.getenv("SECRET_KEY", ""))  # JWT secret para validação de tokens
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -7,11 +7,11 @@ Substitui o antigo sistema custom de JWT do Auth-API.
 
 from typing import Optional
 from fastapi import HTTPException, status, Depends
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer
+from fastapi.security.http import HTTPAuthorizationCredentials
 from supabase import create_client, Client
 from app.core.config import settings
 import jwt
-from jwt import PyJWKClient
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,20 +48,13 @@ async def verify_jwt_token(token: str) -> dict:
         HTTPException: Se o token for inválido
     """
     try:
-        # URL do JWKS do Supabase
-        jwks_url = f"{settings.SUPABASE_URL}/auth/v1/jwks"
-        
-        # Cliente JWKS para buscar a chave pública
-        jwks_client = PyJWKClient(jwks_url)
-        
-        # Obtém a chave de assinatura
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-        
+        # Supabase usa HS256 com JWT_SECRET (não RS256/JWKS)
+        # O segredo JWT é derivado do SUPABASE_JWT_SECRET
         # Decodifica e valida o token
         payload = jwt.decode(
             token,
-            signing_key.key,
-            algorithms=["RS256"],
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
             audience="authenticated",
             options={"verify_exp": True}
         )
@@ -89,7 +82,7 @@ async def verify_jwt_token(token: str) -> dict:
 
 
 async def get_current_user(
-    credentials: HTTPAuthCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> dict:
     """
     Dependency para obter o usuário atual autenticado

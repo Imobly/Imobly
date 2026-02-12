@@ -11,9 +11,12 @@ alembic==1.13.1
 # redis==5.0.1
 # aioredis==2.0.1
 
-# Supabase (Auth + Storage)
-supabase==2.8.0
-PyJWT==2.8.0
+# Supabase (Auth + Storage) - Versões compatíveis
+supabase==2.4.4
+gotrue==2.8.0
+httpx==0.24.1
+PyJWT>=2.8.0
+python-jose[cryptography]==3.3.0
 
 # Validação de dados e settings
 pydantic==2.5.0
@@ -33,7 +36,6 @@ python-dateutil==2.8.2
 pytest==7.4.3
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
-httpx<0.25.0,>=0.24.0
 black==23.11.0
 isort==5.12.0
 flake8==6.1.0

@@ -1,6 +1,6 @@
 # Imobly - Monorepo
 
-Sistema completo de gestão imobiliária unificado em um único repositório.
+Sistema completo de gestão imobiliária
 
 ## 📦 Estrutura do Projeto
 
@@ -10,7 +10,9 @@ Imobly/
 ├── frontend/         # Next.js 14 (porta 3000)
 ├── docs/             # Documentação centralizada
 ├── .github/          # CI/CD workflows
-└── docker-compose.yml
+├── docker-compose.yml
+├── Makefile          # Comandos simplificados
+└── SETUP.md          # ← Guia completo de configuração
 ```
 
 ## 🚀 Quick Start
@@ -18,36 +20,57 @@ Imobly/
 ### Pré-requisitos
 
 - Docker & Docker Compose
-- Python 3.11+ (para desenvolvimento local do backend)
-- Node.js 18+ & pnpm (para desenvolvimento local do frontend)
-- Conta no Supabase
+- Conta no Supabase (obrigatório)
+- Python 3.11+ (opcional, para dev local)
+- Node.js 18+ & pnpm (opcional, para dev local)
 
 ### 1. Configurar Variáveis de Ambiente
 
 ```bash
-# Backend
-cp backend/.env.example backend/.env
-# Edite backend/.env com suas credenciais Supabase
+# Copiar template (se ainda não existe .env)
+cp .env.example .env
 
-# Frontend  
-cp frontend/.env.local.example frontend/.env.local
-# Edite frontend/.env.local com suas credenciais Supabase
+# Editar .env na RAIZ do projeto
+# Preencha com suas credenciais do Supabase:
+# - SUPABASE_URL
+# - SUPABASE_ANON_KEY  
+# - SUPABASE_SERVICE_ROLE_KEY
+# - DATABASE_URL (Connection Pooling - porta 6543)
+# - SECRET_KEY (gere com: openssl rand -hex 32)
 ```
+
+**📖 Veja [SETUP.md](SETUP.md) para instruções detalhadas de como obter essas credenciais.**
 
 ### 2. Iniciar com Docker (Recomendado)
 
 ```bash
-# Iniciar todos os serviços
-docker-compose up
+# Comando único para iniciar tudo
+make run-all-dev
 
-# Backend: http://localhost:8000
-# Frontend: http://localhost:3000
-# Docs API: http://localhost:8000/docs
+# Ou manualmente:
+docker-compose build
+docker-compose up -d
 ```
 
-### 3. Desenvolvimento Local (sem Docker)
+**Serviços disponíveis:**
+- Backend: http://localhost:8000
+- Frontend: http://localhost:3000
+- API Docs: http://localhost:8000/docs
 
-#### Backend
+### 3. Comandos Make Disponíveis
+
+```bash
+make help           # Ver todos os comandos
+make run-all-dev    # Iniciar tudo (recomendado)
+make stop-all       # Parar serviços
+make restart-all    # Reiniciar serviços
+make logs-all       # Ver logs em tempo real
+make health         # Verificar status dos serviços
+make clean          # Limpar containers e cache
+make test           # Executar testes
+```
+
+### 4. Desenvolvimento Local (sem Docker)
 ```bash
 cd backend
 python -m venv venv
@@ -63,30 +86,13 @@ pnpm install
 pnpm dev
 ```
 
-## 📚 Documentação
-
-- [Guia de Arquitetura](docs/guides/architecture.md)
-- [Getting Started](docs/guides/getting-started.md)
-- [API Reference](docs/api/reference.md)
-- [Deploy Guide](docs/guides/deployment.md)
-
 ## 🔐 Autenticação
 
 Este projeto usa **Supabase Auth** para autenticação:
 
 - **Frontend**: Gerenciado via `@supabase/auth-helpers-nextjs`
 - **Backend**: Validação JWT via `supabase-py`
-- **Google OAuth**: Configurado no Supabase Dashboard
-
-### Configuração do Supabase Auth
-
-1. Acesse [Supabase Dashboard](https://supabase.com/dashboard)
-2. Authentication → Settings
-3. Configure Google OAuth (opcional)
-4. Obtenha as credenciais:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+- **Google OAuth**: Configurado no Supabase Dashboard (em desenvolvimento)
 
 ## 📦 Tecnologias
 
@@ -141,24 +147,10 @@ Este projeto foi migrado de 3 repositórios separados para um monorepo:
 - Imobly/Frontend → `frontend/`
 - Imobly/Documentation → `docs/`
 
-Ver [MIGRATION_LOG.md](docs/MIGRATION_LOG.md) para detalhes.
-
-## 🤝 Contribuindo
-
-1. Fork o projeto
-2. Crie uma branch: `git checkout -b feature/nova-funcionalidade`
-3. Commit suas mudanças: `git commit -m 'Add: nova funcionalidade'`
-4. Push para a branch: `git push origin feature/nova-funcionalidade`
-5. Abra um Pull Request
 
 ## 📄 Licença
 
 Este projeto é privado e confidencial.
-
-## 📧 Contato
-
-- **Organização**: [Imobly](https://github.com/Imobly)
-- **Issues**: [GitHub Issues](https://github.com/Imobly/Imobly/issues)
 
 ---
 

@@ -49,7 +49,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
     setErrors({});
 
     try {
-      const response = await fetch('http://localhost:8001/api/v1/auth/me', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/auth/me`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

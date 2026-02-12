@@ -18,6 +18,30 @@ RUN npm install -g pnpm@latest && \
     pnpm install --frozen-lockfile
 
 # ==========================================
+# Stage: Development (for docker-compose)
+# ==========================================
+FROM base AS development
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@latest
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+
+# Install all dependencies (including dev dependencies)
+RUN pnpm install
+
+# Copy all source code
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+# Start development server
+CMD ["pnpm", "dev"]
+
+# ==========================================
 # Stage 2: Builder
 # ==========================================
 FROM base AS builder
