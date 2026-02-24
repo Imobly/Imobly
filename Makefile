@@ -51,7 +51,7 @@ setup:
 	@echo "$(CYAN)═══════════════════════════════════════$(RESET)"
 	@echo "$(GREEN)📦 Building Docker Containers$(RESET)"
 	@echo "$(CYAN)═══════════════════════════════════════$(RESET)"
-	@docker-compose build
+	docker-compose build
 	@echo "$(GREEN)✅ Build concluído!$(RESET)"
 	@echo "$(YELLOW)💡 Próximo passo: make run-all-dev$(RESET)"
 
@@ -59,18 +59,7 @@ run-all-dev:
 	@echo "$(CYAN)═══════════════════════════════════════$(RESET)"
 	@echo "$(GREEN)🚀 Iniciando Imobly Development$(RESET)"
 	@echo "$(CYAN)═══════════════════════════════════════$(RESET)"
-	@if [ ! -f backend/.env ]; then \
-		echo "$(RED)❌ Erro: Arquivo backend/.env não encontrado!$(RESET)"; \
-		echo "$(YELLOW)💡 Copie backend/.env.example para backend/.env e configure suas credenciais$(RESET)"; \
-		exit 1; \
-	fi
-	@if [ ! -f frontend/.env ]; then \
-		echo "$(RED)❌ Erro: Arquivo frontend/.env não encontrado!$(RESET)"; \
-		echo "$(YELLOW)💡 Copie frontend/.env.example para frontend/.env e configure suas credenciais$(RESET)"; \
-		exit 1; \
-	fi
-	@echo "$(CYAN)🔄 Starting services...$(RESET)"
-	@docker-compose up -d
+	docker-compose up -d
 	@echo ""
 	@echo "$(GREEN)✅ Aplicação iniciada com sucesso!$(RESET)"
 	@echo ""
@@ -83,19 +72,19 @@ run-all-dev:
 
 stop:
 	@echo "$(YELLOW)🛑 Parando todos os serviços...$(RESET)"
-	@docker-compose down
+	docker-compose down
 	@echo "$(GREEN)✅ Serviços parados$(RESET)"
 
 stop-all: stop
 
 restart-all:
 	@echo "$(YELLOW)🔄 Reiniciando todos os serviços...$(RESET)"
-	@docker-compose restart
+	docker-compose restart
 	@echo "$(GREEN)✅ Serviços reiniciados$(RESET)"
 
 logs-all:
 	@echo "$(CYAN)📋 Exibindo logs (Ctrl+C para sair)...$(RESET)"
-	@docker-compose logs -f
+	docker-compose logs -f
 
 # ========================================
 # Setup e Build
@@ -103,12 +92,8 @@ logs-all:
 
 clean:
 	@echo "$(YELLOW)🧹 Limpando ambiente...$(RESET)"
-	@docker-compose down -v 2>/dev/null || true
-	@docker system prune -f
-	@echo "$(CYAN)Limpando cache do backend...$(RESET)"
-	@cd backend && find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@cd backend && find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	@cd backend && find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	docker-compose down -v
+	docker system prune -f
 	@echo "$(GREEN)✅ Limpeza concluída!$(RESET)"
 
 # ========================================
@@ -117,21 +102,20 @@ clean:
 
 test:
 	@echo "$(CYAN)🧪 Executando todos os testes...$(RESET)"
-	@$(MAKE) test-backend
-	@$(MAKE) test-frontend
+	docker exec imobly-backend pytest -v --cov=app --cov-report=term-missing
 
 test-backend:
 	@echo "$(CYAN)🧪 Testes do Backend...$(RESET)"
-	@cd backend && pytest -v --cov=app --cov-report=term-missing
+	docker exec imobly-backend pytest -v --cov=app --cov-report=term-missing
 
 test-frontend:
 	@echo "$(CYAN)🧪 Testes do Frontend...$(RESET)"
-	@cd frontend && pnpm test
+	docker exec imobly-frontend pnpm test
 
 lint:
 	@echo "$(CYAN)🔍 Executando linters...$(RESET)"
-	@cd backend && flake8 app || true
-	@cd frontend && pnpm lint || true
+	docker exec imobly-backend flake8 app
+	docker exec imobly-frontend pnpm lint
 
 # ========================================
 # Utilidades
@@ -139,13 +123,11 @@ lint:
 
 ps:
 	@echo "$(CYAN)📊 Containers em execução:$(RESET)"
-	@docker-compose ps
+	docker-compose ps
 
 health:
 	@echo "$(CYAN)🏥 Verificando saúde dos serviços...$(RESET)"
 	@echo ""
-	@echo -n "Backend:  "
-	@curl -s -f http://localhost:8000/health > /dev/null && echo "$(GREEN)✅ OK$(RESET)" || echo "$(RED)❌ DOWN$(RESET)"
-	@echo -n "Frontend: "
-	@curl -s -f http://localhost:3000 > /dev/null && echo "$(GREEN)✅ OK$(RESET)" || echo "$(RED)❌ DOWN$(RESET)"
+	docker exec imobly-backend curl -f http://localhost:8000/health && echo "$(GREEN)✅ Backend OK$(RESET)" || echo "$(RED)❌ Backend DOWN$(RESET)"
+	docker exec imobly-frontend curl -f http://localhost:3000 && echo "$(GREEN)✅ Frontend OK$(RESET)" || echo "$(RED)❌ Frontend DOWN$(RESET)"
 	@echo ""

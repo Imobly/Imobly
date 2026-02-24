@@ -54,16 +54,16 @@ install:
 	pip install -r requirements-dev.txt
 
 test:
-	pytest -v --cov=app --cov-report=html --cov-report=term-missing
+	pytest -v --cov=src --cov-report=html --cov-report=term-missing
 
 lint:
 	@echo "Running Black..."
-	@black --check app tests
+	@black --check src tests
 	@echo "Running isort..."
-	@isort --check app tests
+	@isort --check src tests
 	@echo "Running Flake8..."
-	@flake8 app tests
+	@flake8 src tests
 
 format:
-	black app tests
-	isort app tests
+	black src tests
+	isort src tests

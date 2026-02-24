@@ -25,17 +25,6 @@ import { integerMask, currencyMask, currencyUnmask, areaMask, cepMask } from "@/
 import { propertiesService } from "@/lib/api/properties"
 import { toast } from "sonner"
 
-interface Unit {
-  id: string
-  number: string
-  area: number
-  bedrooms: number
-  bathrooms: number
-  rent: number
-  status: 'vacant' | 'occupied' | 'maintenance'
-  tenant?: string
-}
-
 interface PropertyDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -59,16 +48,12 @@ const initialProperty: Property = {
   status: "vacant",
   description: "",
   images: [],
-  units: [],
-  isResidential: false,
   tenant_id: null,
 }
 
 export function PropertyDialog({ open, onOpenChange, property, onSave }: PropertyDialogProps) {
   const [formData, setFormData] = useState<Property>(initialProperty)
   const [isLoading, setIsLoading] = useState(false)
-  const [showUnitDialog, setShowUnitDialog] = useState(false)
-  const [editingUnit, setEditingUnit] = useState<Unit | null>(null)
   const [uploadingImages, setUploadingImages] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [dragActive, setDragActive] = useState(false)
@@ -151,7 +136,14 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
     setIsLoading(true)
 
     try {
-      const savedProperty = await onSave(formData)
+      // Remove blob URLs e pendingFiles antes de salvar
+      const dataToSave = {
+        ...formData,
+        images: (formData.images || []).filter(img => !img.startsWith('blob:')),
+        pendingFiles: undefined
+      }
+      
+      const savedProperty = await onSave(dataToSave)
       
       // Se há imagens pendentes e a propriedade foi salva com sucesso, fazer upload
       const pendingFiles = (formData as any).pendingFiles
@@ -166,13 +158,20 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
             (progress) => setUploadProgress(progress)
           )
           
-          toast.success(`Propriedade salva e ${result.uploaded_files.length} imagem(ns) enviada(s)!`)
+          toast.success(`Propriedade salva e ${result.images.length} imagem(ns) enviada(s)!`)
           
-          // Limpar arquivos pendentes
+          // Atualizar com as imagens do resultado
           setFormData(prev => ({
             ...prev,
+            images: result.property.images || [],
             pendingFiles: []
           }))
+          
+          // Aguardar um momento para o usuário ver a mensagem
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          
+          // Fechar o dialog após upload bem-sucedido
+          onOpenChange(false)
         } catch (error: any) {
           console.error("Erro ao fazer upload das imagens:", error)
           toast.error("Propriedade salva, mas houve erro no upload de imagens")
@@ -180,6 +179,11 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
           setUploadingImages(false)
           setUploadProgress(0)
         }
+      } else {
+        toast.success("Propriedade salva com sucesso!")
+        // Aguardar um momento e fechar
+        await new Promise(resolve => setTimeout(resolve, 800))
+        onOpenChange(false)
       }
     } finally {
       setIsLoading(false)
@@ -214,15 +218,13 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
 
     // Se a propriedade não foi salva ainda, armazena localmente
     if (!property?.id) {
-      // Criar URLs temporárias para preview
-      const tempUrls = fileArray.map(file => URL.createObjectURL(file))
+      // Armazena os arquivos para upload posterior (NÃO adiciona blob URLs)
       setFormData(prev => ({
         ...prev,
-        images: [...(prev.images || []), ...tempUrls],
         // Armazena os arquivos para upload posterior
-        pendingFiles: [...(prev.pendingFiles || []), ...fileArray]
+        pendingFiles: [...((prev as any).pendingFiles || []), ...fileArray]
       }))
-      toast.success(`${fileArray.length} imagem(ns) adicionada(s) para upload`)
+      toast.success(`${fileArray.length} imagem(ns) adicionada(s) para upload após salvar`)
       return
     }
 
@@ -237,16 +239,13 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
         (progress) => setUploadProgress(progress)
       )
 
-      // Recarregar propriedade atualizada do backend
-      const updatedProperty = await propertiesService.getProperty(property.id)
-      
-      // Atualizar formData com todas as imagens do backend
+      // Atualizar formData com as imagens retornadas
       setFormData(prev => ({
         ...prev,
-        images: updatedProperty.images || []
+        images: result.property.images || []
       }))
-
-      toast.success(`${result.uploaded_files.length} imagem(ns) enviada(s) com sucesso!`)
+      
+      toast.success(`${result.images.length} imagem(ns) enviada(s) com sucesso!`)
     } catch (error: any) {
       console.error("Erro ao fazer upload:", error)
       toast.error(error.response?.data?.detail || "Erro ao enviar imagens")
@@ -264,8 +263,8 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
     }
 
     try {
-      await propertiesService.deleteImage(property.id, imageUrl)
-      setFormData((prev) => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }))
+      const result = await propertiesService.deleteImage(property.id, index)
+      setFormData((prev) => ({ ...prev, images: result.property.images || [] }))
       toast.success("Imagem removida com sucesso")
     } catch (error: any) {
       console.error("Erro ao deletar imagem:", error)
@@ -299,21 +298,6 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
     }
   }
 
-  const addOrUpdateUnit = (unit: Unit) => {
-    if (editingUnit) {
-      // Edit existing unit
-      const updatedUnits = formData.units?.map(u => u.id === unit.id ? unit : u) || []
-      handleInputChange('units', updatedUnits)
-    } else {
-      // Add new unit
-      const newUnit = { ...unit, id: Date.now().toString() }
-      const updatedUnits = [...(formData.units || []), newUnit]
-      handleInputChange('units', updatedUnits)
-    }
-    setShowUnitDialog(false)
-    setEditingUnit(null)
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -326,12 +310,9 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
 
         <form onSubmit={handleSubmit}>
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className={`grid w-full ${formData.isResidential ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="basic">Informações Básicas</TabsTrigger>
               <TabsTrigger value="details">Detalhes</TabsTrigger>
-              {formData.isResidential && (
-                <TabsTrigger value="units">Unidades</TabsTrigger>
-              )}
               <TabsTrigger value="images">Fotos</TabsTrigger>
             </TabsList>
 
@@ -350,10 +331,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
 
                 <div className="space-y-2">
                   <Label htmlFor="type">Tipo *</Label>
-                  <Select value={formData.type} onValueChange={(value) => {
-                    handleInputChange("type", value)
-                    handleInputChange("isResidential", value === "residential")
-                  }}>
+                  <Select value={formData.type} onValueChange={(value) => handleInputChange("type", value)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -361,7 +339,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                       <SelectItem value="apartment">Apartamento</SelectItem>
                       <SelectItem value="house">Casa</SelectItem>
                       <SelectItem value="commercial">Comercial</SelectItem>
-                      <SelectItem value="residential">Residencial</SelectItem>
+                      <SelectItem value="studio">Studio</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -435,24 +413,6 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                       <SelectItem value="vacant">Vago</SelectItem>
                       <SelectItem value="occupied">Ocupado</SelectItem>
                       <SelectItem value="maintenance">Manutenção</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="tenant_id">Inquilino (opcional)</Label>
-                  <Select
-                    value={formData.tenant_id ? String(formData.tenant_id) : undefined}
-                    onValueChange={(value) => handleInputChange("tenant_id", value === "none" ? null : parseInt(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um inquilino" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {tenants.map(t => (
-                        <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
-                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -556,85 +516,6 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
               </div>
             </TabsContent>
 
-            {formData.isResidential && (
-              <TabsContent value="units" className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">Unidades do Residencial</h3>
-                  <Button 
-                    type="button" 
-                    onClick={() => {
-                      setEditingUnit(null)
-                      setShowUnitDialog(true)
-                    }}
-                    size="sm"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nova Unidade
-                  </Button>
-                </div>
-
-                <div className="grid gap-4">
-                  {formData.units?.map((unit) => (
-                    <Card key={unit.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-4">
-                            <h4 className="font-medium">Unidade {unit.number}</h4>
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              unit.status === 'occupied' ? 'bg-green-100 text-green-800' :
-                              unit.status === 'vacant' ? 'bg-gray-100 text-gray-800' :
-                              'bg-orange-100 text-orange-800'
-                            }`}>
-                              {unit.status === 'occupied' ? 'Ocupada' : 
-                               unit.status === 'vacant' ? 'Vaga' : 'Manutenção'}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            {unit.area}m² • {unit.bedrooms} quartos • {unit.bathrooms} banheiros • R$ {unit.rent.toLocaleString('pt-BR')}
-                          </div>
-                          {unit.tenant && (
-                            <div className="text-sm text-blue-600">Inquilino: {unit.tenant}</div>
-                          )}
-                        </div>
-                        <div className="flex space-x-2">
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setEditingUnit(unit)
-                              setShowUnitDialog(true)
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              const updatedUnits = formData.units?.filter(u => u.id !== unit.id) || []
-                              handleInputChange('units', updatedUnits)
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                  
-                  {(!formData.units || formData.units.length === 0) && (
-                    <div className="text-center py-8 text-gray-500">
-                      <Building className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                      <p>Nenhuma unidade cadastrada</p>
-                      <p className="text-sm">Clique em "Nova Unidade" para começar</p>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            )}
-
             <TabsContent value="images" className="space-y-4">
               <Card>
                 <CardHeader>
@@ -693,6 +574,44 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                         </label>
                       </div>
 
+                      {/* Arquivos Pendentes (antes de salvar a propriedade) */}
+                      {!property?.id && (formData as any).pendingFiles && (formData as any).pendingFiles.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium text-gray-700 mb-2">
+                            Imagens selecionadas ({(formData as any).pendingFiles.length}) - Serão enviadas após salvar:
+                          </p>
+                          <div className="grid gap-4 md:grid-cols-3">
+                            {(formData as any).pendingFiles.map((file: File, index: number) => (
+                              <div key={index} className="relative group">
+                                <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center">
+                                  <div className="text-center">
+                                    <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                    <p className="text-xs text-gray-600 px-2 truncate max-w-[150px]">
+                                      {file.name}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => {
+                                    // Remove do pendingFiles
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      pendingFiles: (prev as any).pendingFiles.filter((_: File, i: number) => i !== index)
+                                    }))
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Grid de Imagens */}
                       {formData.images.length > 0 && (
                         <div className="grid gap-4 md:grid-cols-3 mt-4">
@@ -727,170 +646,6 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
             </Button>
             <Button type="submit" disabled={isLoading}>
               {isLoading ? "Salvando..." : property ? "Salvar Alterações" : "Criar Imóvel"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-
-      {/* Unit Dialog */}
-      <UnitDialog 
-        open={showUnitDialog}
-        onOpenChange={setShowUnitDialog}
-        unit={editingUnit}
-        onSave={addOrUpdateUnit}
-      />
-    </Dialog>
-  )
-}
-
-// Unit Dialog Component
-interface UnitDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  unit?: Unit | null
-  onSave: (unit: Unit) => void
-}
-
-function UnitDialog({ open, onOpenChange, unit, onSave }: UnitDialogProps) {
-  const [unitData, setUnitData] = useState<Unit>({
-    id: '',
-    number: '',
-    area: 0,
-    bedrooms: 0,
-    bathrooms: 0,
-    rent: 0,
-    status: 'vacant'
-  })
-
-  useEffect(() => {
-    if (unit) {
-      setUnitData(unit)
-    } else {
-      setUnitData({
-        id: '',
-        number: '',
-        area: 0,
-        bedrooms: 0,
-        bathrooms: 0,
-        rent: 0,
-        status: 'vacant'
-      })
-    }
-  }, [unit])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(unitData)
-  }
-
-  const handleInputChange = (field: keyof Unit, value: any) => {
-    setUnitData(prev => ({ ...prev, [field]: value }))
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{unit ? 'Editar Unidade' : 'Nova Unidade'}</DialogTitle>
-          <DialogDescription>
-            {unit ? 'Atualize as informações da unidade.' : 'Adicione uma nova unidade ao residencial.'}
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="unit-number">Número da Unidade</Label>
-              <Input
-                id="unit-number"
-                value={unitData.number}
-                onChange={(e) => handleInputChange('number', e.target.value)}
-                placeholder="Ex: 101, 202, Casa A"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit-area">Área (m²)</Label>
-              <Input
-                id="unit-area"
-                type="number"
-                value={unitData.area}
-                onChange={(e) => handleInputChange('area', Number(e.target.value))}
-                min="1"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit-bedrooms">Quartos</Label>
-              <Input
-                id="unit-bedrooms"
-                type="number"
-                value={unitData.bedrooms}
-                onChange={(e) => handleInputChange('bedrooms', Number(e.target.value))}
-                min="0"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit-bathrooms">Banheiros</Label>
-              <Input
-                id="unit-bathrooms"
-                type="number"
-                value={unitData.bathrooms}
-                onChange={(e) => handleInputChange('bathrooms', Number(e.target.value))}
-                min="0"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit-rent">Valor do Aluguel (R$)</Label>
-              <Input
-                id="unit-rent"
-                type="number"
-                value={unitData.rent}
-                onChange={(e) => handleInputChange('rent', Number(e.target.value))}
-                min="0"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit-status">Status</Label>
-              <Select value={unitData.status} onValueChange={(value) => handleInputChange('status', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="vacant">Vaga</SelectItem>
-                  <SelectItem value="occupied">Ocupada</SelectItem>
-                  <SelectItem value="maintenance">Manutenção</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {unitData.status === 'occupied' && (
-            <div className="space-y-2">
-              <Label htmlFor="unit-tenant">Inquilino</Label>
-              <Input
-                id="unit-tenant"
-                value={unitData.tenant || ''}
-                onChange={(e) => handleInputChange('tenant', e.target.value)}
-                placeholder="Nome do inquilino"
-              />
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit">
-              {unit ? 'Salvar Alterações' : 'Adicionar Unidade'}
             </Button>
           </DialogFooter>
         </form>

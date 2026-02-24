@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { useAuth } from '../../lib/contexts/auth';
+import { toast } from 'sonner';
 
 interface RegisterFormProps {
   onToggleMode: () => void;
@@ -18,7 +19,6 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
     name: '',
     username: '',
     email: '',
-    username: '',
     password: '',
     confirmPassword: '',
   });
@@ -65,14 +65,17 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
         name: formData.name,
         username: formData.username,
         email: formData.email,
-        username: formData.username,
         password: formData.password,
       });
       
-      // Redireciona para a página salva ou dashboard
-      const redirectTo = sessionStorage.getItem('redirectAfterLogin') || '/dashboard';
-      sessionStorage.removeItem('redirectAfterLogin');
-      router.push(redirectTo);
+      // Mostra mensagem de sucesso
+      toast.success('Conta criada com sucesso! Faça login para continuar.');
+      
+      // Aguarda um momento para o usuário ver a mensagem
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Redireciona para login
+      router.push('/login');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar conta');
     } finally {
@@ -132,21 +135,6 @@ export function RegisterForm({ onToggleMode }: RegisterFormProps) {
               onChange={handleInputChange}
               required
               disabled={isLoading}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="username">Usuário</Label>
-            <Input
-              id="username"
-              name="username"
-              type="text"
-              placeholder="seuusuario"
-              value={formData.username}
-              onChange={handleInputChange}
-              required
-              disabled={isLoading}
-              minLength={3}
             />
           </div>
           

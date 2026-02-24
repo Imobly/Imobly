@@ -1,244 +1,141 @@
-
-SQL IMOBLY:
-
--- public.contracts definition
-
--- Drop table
-
--- DROP TABLE public.contracts;
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
 CREATE TABLE public.contracts (
-	id serial4 NOT NULL,
-	user_id int4 NOT NULL,
-	title varchar(255) NOT NULL,
-	property_id int4 NOT NULL,
-	tenant_id int4 NOT NULL,
-	start_date date NOT NULL,
-	end_date date NOT NULL,
-	rent numeric(10, 2) NOT NULL,
-	deposit numeric(10, 2) NOT NULL,
-	interest_rate numeric(5, 2) NOT NULL,
-	fine_rate numeric(5, 2) NOT NULL,
-	status varchar(20) NULL,
-	created_at timestamp NULL,
-	updated_at timestamp NULL,
-	CONSTRAINT contracts_pkey PRIMARY KEY (id)
+  id integer NOT NULL DEFAULT nextval('contracts_id_seq'::regclass),
+  user_id integer NOT NULL,
+  title character varying NOT NULL,
+  property_id integer NOT NULL,
+  tenant_id integer NOT NULL,
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  rent numeric,
+  deposit numeric NOT NULL,
+  interest_rate numeric NOT NULL,
+  fine_rate numeric NOT NULL,
+  status character varying,
+  created_at timestamp without time zone,
+  updated_at timestamp without time zone,
+  titulo character varying,
+  titulozin character varying,
+  CONSTRAINT contracts_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_contract_property_id FOREIGN KEY (property_id) REFERENCES public.properties(id),
+  CONSTRAINT fk_contract_tenant_id FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT contracts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE INDEX ix_contracts_id ON public.contracts USING btree (id);
-CREATE INDEX ix_contracts_user_id ON public.contracts USING btree (user_id);
-
-
--- public.contracts foreign keys
-
-ALTER TABLE public.contracts ADD CONSTRAINT fk_contract_property_id FOREIGN KEY (property_id) REFERENCES public.properties(id);
-ALTER TABLE public.contracts ADD CONSTRAINT fk_contract_tenant_id FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
-
--- public.expenses definition
-
--- Drop table
-
--- DROP TABLE public.expenses;
-
 CREATE TABLE public.expenses (
-	id varchar(36) NOT NULL,
-	user_id int4 NOT NULL,
-	"type" varchar(20) NOT NULL,
-	category varchar(100) NOT NULL,
-	description text NOT NULL,
-	amount numeric(10, 2) NOT NULL,
-	"date" date NOT NULL,
-	property_id int4 NOT NULL,
-	status varchar(20) NOT NULL,
-	priority varchar(20) NULL,
-	vendor varchar(255) NULL,
-	"number" varchar(20) NULL,
-	receipt text NULL,
-	documents jsonb NULL,
-	created_at timestamp NULL,
-	updated_at timestamp NULL,
-	CONSTRAINT expenses_pkey PRIMARY KEY (id)
+  id character varying NOT NULL,
+  user_id integer NOT NULL,
+  type character varying NOT NULL,
+  category character varying NOT NULL,
+  description text NOT NULL,
+  amount numeric NOT NULL,
+  date date NOT NULL,
+  property_id integer NOT NULL,
+  status character varying NOT NULL,
+  priority character varying,
+  vendor character varying,
+  number character varying,
+  receipt text,
+  documents jsonb,
+  created_at timestamp without time zone,
+  updated_at timestamp without time zone,
+  CONSTRAINT expenses_pkey PRIMARY KEY (id),
+  CONSTRAINT expenses_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id),
+  CONSTRAINT expenses_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE INDEX ix_expenses_user_id ON public.expenses USING btree (user_id);
-
-
--- public.expenses foreign keys
-
-ALTER TABLE public.expenses ADD CONSTRAINT expenses_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id);
-
-
-
-
-
--- public.notifications definition
-
--- Drop table
-
--- DROP TABLE public.notifications;
-
 CREATE TABLE public.notifications (
-	id varchar(36) NOT NULL,
-	user_id int4 NOT NULL,
-	"type" varchar(50) NOT NULL,
-	title varchar(255) NOT NULL,
-	message text NOT NULL,
-	"date" timestamp NOT NULL,
-	priority varchar(20) NOT NULL,
-	read_status bool NULL,
-	action_required bool NULL,
-	related_id varchar(255) NULL,
-	related_type varchar(50) NULL,
-	created_at timestamp NULL,
-	updated_at timestamp NULL,
-	CONSTRAINT notifications_pkey PRIMARY KEY (id)
+  id character varying NOT NULL,
+  user_id integer NOT NULL,
+  type character varying NOT NULL,
+  title character varying NOT NULL,
+  message text NOT NULL,
+  date timestamp without time zone NOT NULL,
+  priority character varying NOT NULL,
+  read_status boolean,
+  action_required boolean,
+  related_id character varying,
+  related_type character varying,
+  created_at timestamp without time zone,
+  updated_at timestamp without time zone,
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE INDEX ix_notifications_user_id ON public.notifications USING btree (user_id);
-
-
-
-
-
--- public.payments definition
-
--- Drop table
-
--- DROP TABLE public.payments;
-
 CREATE TABLE public.payments (
-	id serial4 NOT NULL,
-	user_id int4 NOT NULL,
-	property_id int4 NOT NULL,
-	tenant_id int4 NOT NULL,
-	contract_id int4 NOT NULL,
-	due_date date NOT NULL,
-	payment_date date NULL,
-	amount numeric(10, 2) NOT NULL,
-	fine_amount numeric(10, 2) NULL,
-	total_amount numeric(10, 2) NOT NULL,
-	status varchar(20) NOT NULL,
-	payment_method varchar(20) NULL,
-	description text NULL,
-	created_at timestamp NULL,
-	updated_at timestamp NULL,
-	CONSTRAINT payments_pkey PRIMARY KEY (id)
+  id integer NOT NULL DEFAULT nextval('payments_id_seq'::regclass),
+  user_id integer NOT NULL,
+  property_id integer NOT NULL,
+  tenant_id integer NOT NULL,
+  contract_id integer NOT NULL,
+  due_date date NOT NULL,
+  payment_date date,
+  amount numeric NOT NULL,
+  fine_amount numeric,
+  total_amount numeric NOT NULL,
+  status character varying NOT NULL,
+  payment_method character varying,
+  description text,
+  created_at timestamp without time zone,
+  updated_at timestamp without time zone,
+  CONSTRAINT payments_pkey PRIMARY KEY (id),
+  CONSTRAINT payments_contract_id_fkey FOREIGN KEY (contract_id) REFERENCES public.contracts(id),
+  CONSTRAINT payments_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id),
+  CONSTRAINT payments_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT payments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE INDEX ix_payments_id ON public.payments USING btree (id);
-CREATE INDEX ix_payments_user_id ON public.payments USING btree (user_id);
-
-
--- public.payments foreign keys
-
-ALTER TABLE public.payments ADD CONSTRAINT payments_contract_id_fkey FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
-ALTER TABLE public.payments ADD CONSTRAINT payments_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id);
-ALTER TABLE public.payments ADD CONSTRAINT payments_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
-
--- public.properties definition
-
--- Drop table
-
--- DROP TABLE public.properties;
-
 CREATE TABLE public.properties (
-	id serial4 NOT NULL,
-	user_id int4 NOT NULL,
-	"name" varchar(255) NOT NULL,
-	address text NOT NULL,
-	neighborhood varchar(100) NOT NULL,
-	city varchar(100) NOT NULL,
-	state varchar(50) NOT NULL,
-	zip_code varchar(20) NOT NULL,
-	"type" varchar(50) NOT NULL,
-	area numeric(10, 2) NOT NULL,
-	bedrooms int4 NOT NULL,
-	bathrooms int4 NOT NULL,
-	parking_spaces int4 NULL,
-	rent numeric(10, 2) NOT NULL,
-	status varchar(20) NULL,
-	description text NULL,
-	images json NULL,
-	is_residential bool NULL,
-	tenant_id int4 NULL,
-	created_at timestamp NULL,
-	updated_at timestamp NULL,
-	CONSTRAINT properties_pkey PRIMARY KEY (id)
+  id integer NOT NULL DEFAULT nextval('properties_id_seq'::regclass),
+  user_id integer NOT NULL,
+  name character varying NOT NULL,
+  address text NOT NULL,
+  neighborhood character varying NOT NULL,
+  city character varying NOT NULL,
+  state character varying NOT NULL,
+  zip_code character varying NOT NULL,
+  type character varying NOT NULL,
+  area numeric NOT NULL,
+  bedrooms integer NOT NULL,
+  bathrooms integer NOT NULL,
+  parking_spaces integer,
+  rent numeric NOT NULL,
+  status character varying,
+  description text,
+  images json,
+  tenant_id integer,
+  created_at timestamp without time zone,
+  updated_at timestamp without time zone,
+  CONSTRAINT properties_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_property_tenant_id FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT properties_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE INDEX ix_properties_id ON public.properties USING btree (id);
-CREATE INDEX ix_properties_tenant_id ON public.properties USING btree (tenant_id);
-CREATE INDEX ix_properties_user_id ON public.properties USING btree (user_id);
-
-
--- public.properties foreign keys
-
-ALTER TABLE public.properties ADD CONSTRAINT fk_property_tenant_id FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE SET NULL;
-
-
-
-
-
--- public.tenants definition
-
--- Drop table
-
--- DROP TABLE public.tenants;
-
 CREATE TABLE public.tenants (
-	id serial4 NOT NULL,
-	user_id int4 NOT NULL,
-	"name" varchar(255) NOT NULL,
-	email varchar(255) NOT NULL,
-	phone varchar(20) NOT NULL,
-	cpf_cnpj varchar(20) NOT NULL,
-	birth_date date NULL,
-	profession varchar(100) NOT NULL,
-	emergency_contact json NULL,
-	documents json NULL,
-	contract_id int4 NULL,
-	status varchar(20) NULL,
-	created_at timestamp NULL,
-	updated_at timestamp NULL,
-	CONSTRAINT tenants_cpf_cnpj_key UNIQUE (cpf_cnpj),
-	CONSTRAINT tenants_email_key UNIQUE (email),
-	CONSTRAINT tenants_pkey PRIMARY KEY (id)
+  id integer NOT NULL DEFAULT nextval('tenants_id_seq'::regclass),
+  user_id integer NOT NULL,
+  name character varying NOT NULL,
+  email character varying NOT NULL UNIQUE,
+  phone character varying NOT NULL,
+  cpf_cnpj character varying NOT NULL UNIQUE,
+  birth_date date,
+  profession character varying NOT NULL,
+  emergency_contact json,
+  documents json,
+  contract_id integer,
+  status character varying,
+  created_at timestamp without time zone,
+  updated_at timestamp without time zone,
+  CONSTRAINT tenants_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_tenant_contract_id FOREIGN KEY (contract_id) REFERENCES public.contracts(id),
+  CONSTRAINT tenants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE INDEX ix_tenants_id ON public.tenants USING btree (id);
-CREATE INDEX ix_tenants_user_id ON public.tenants USING btree (user_id);
-
-
--- public.tenants foreign keys
-
-ALTER TABLE public.tenants ADD CONSTRAINT fk_tenant_contract_id FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
-
-
-
-
--- public.units definition
-
--- Drop table
-
--- DROP TABLE public.units;
-
-CREATE TABLE public.units (
-	id serial4 NOT NULL,
-	user_id int4 NOT NULL,
-	property_id int4 NOT NULL,
-	"number" varchar(50) NOT NULL,
-	area numeric(10, 2) NOT NULL,
-	bedrooms int4 NOT NULL,
-	bathrooms int4 NOT NULL,
-	rent numeric(10, 2) NOT NULL,
-	status varchar(20) NOT NULL,
-	tenant varchar(255) NULL,
-	created_at timestamp NULL,
-	updated_at timestamp NULL,
-	CONSTRAINT units_pkey PRIMARY KEY (id)
+CREATE TABLE public.users (
+  id integer NOT NULL DEFAULT nextval('users_id_seq'::regclass),
+  email character varying NOT NULL,
+  username character varying NOT NULL,
+  full_name character varying,
+  hashed_password character varying NOT NULL,
+  is_active boolean NOT NULL,
+  is_superuser boolean NOT NULL,
+  created_at timestamp without time zone NOT NULL,
+  updated_at timestamp without time zone NOT NULL,
+  CONSTRAINT users_pkey PRIMARY KEY (id)
 );
-CREATE INDEX ix_units_id ON public.units USING btree (id);
-CREATE INDEX ix_units_user_id ON public.units USING btree (user_id);
-
-
--- public.units foreign keys
-
-ALTER TABLE public.units ADD CONSTRAINT units_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id);

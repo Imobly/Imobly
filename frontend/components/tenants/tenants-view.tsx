@@ -107,8 +107,8 @@ export function TenantsView() {
               end_date: contract.end_date,
               rent: parseFloat(contract.rent.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
               deposit: parseFloat(contract.deposit.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
-              interest_rate: parseFloat(contract.interest_rate.replace(/[^\d.]/g, '')) || 0,
-              fine_rate: parseFloat(contract.fine_rate.replace(/[^\d.]/g, '')) || 0,
+              interest_rate: parseFloat((contract.interest_rate || '').replace(',', '.')) || 0,
+              fine_rate: parseFloat((contract.fine_rate || '').replace(',', '.')) || 0,
               status: contract.status || 'active',
             }
             
@@ -157,8 +157,8 @@ export function TenantsView() {
               end_date: contract.end_date,
               rent: parseFloat(contract.rent.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
               deposit: parseFloat(contract.deposit.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
-              interest_rate: parseFloat(contract.interest_rate.replace(/[^\d.]/g, '')) || 0,
-              fine_rate: parseFloat(contract.fine_rate.replace(/[^\d.]/g, '')) || 0,
+              interest_rate: parseFloat((contract.interest_rate || '').replace(',', '.')) || 0,
+              fine_rate: parseFloat((contract.fine_rate || '').replace(',', '.')) || 0,
               status: contract.status || 'active',
             }
             

@@ -1,1 +1,0 @@
-"""Parametrized tests"""

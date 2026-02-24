@@ -22,7 +22,7 @@ extend-exclude = '''
 profile = "black"
 line_length = 100
 skip_gitignore = false
-known_first_party = ["app"]
+known_first_party = ["src"]
 known_third_party = ["fastapi", "pydantic", "sqlalchemy"]
 
 [tool.mypy]
@@ -44,39 +44,31 @@ module = "tests.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "app.db.*"
+module = "src.database"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "app.src.auth.security"
+module = "src.auth.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "app.src.dashboard.*"
+module = "src.dashboard.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "app.src.payments.*"
+module = "src.payments.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "app.src.expenses.*"
+module = "src.expenses.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "app.src.units.*"
+module = "src.tenants.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "app.src.tenants.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "app.src.properties.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "app.src.notifications.*"
+module = "src.properties.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
@@ -107,7 +99,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["app"]
+source = ["src"]
 omit = [
     "*/tests/*",
     "*/migrations/*",

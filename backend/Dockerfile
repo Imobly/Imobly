@@ -49,7 +49,7 @@ RUN mkdir -p /app/uploads /app/logs && \
 EXPOSE 8000
 
 # Servidor com reload para desenvolvimento
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 # -----------------------------------------------------------------------------
 # Stage: Testing - Para CI/CD e testes locais
@@ -75,15 +75,15 @@ ENV PYTHONPATH=/app
 # Comando para executar linting + testes
 CMD ["sh", "-c", "\
     echo '=== Running Black ===' && \
-    black --check --line-length 100 app tests && \
+    black --check --line-length 100 src tests && \
     echo '=== Running isort ===' && \
-    isort --check-only app tests && \
+    isort --check-only src tests && \
     echo '=== Running Flake8 ===' && \
-    flake8 app tests && \
+    flake8 src tests && \
     echo '=== Running MyPy ===' && \
-    mypy app && \
+    mypy src && \
     echo '=== Running Tests ===' && \
-    pytest -v --cov=app --cov-report=html --cov-report=term-missing && \
+    pytest -v --cov=src --cov-report=html --cov-report=term-missing && \
     echo '✅ All tests passed!' \
 "]
 
@@ -111,4 +111,4 @@ USER app
 EXPOSE 8000
 
 # Servidor em produção (sem reload)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

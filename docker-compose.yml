@@ -13,7 +13,7 @@ services:
     env_file:
       - ./backend/.env
     volumes:
-      - ./backend/app:/app/app:rw
+      - ./backend/src:/app/src:rw
       - ./backend/tests:/app/tests:rw
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs

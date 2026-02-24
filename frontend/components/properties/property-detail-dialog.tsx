@@ -48,7 +48,12 @@ export function PropertyDetailDialog({
   // Construir URLs completas das imagens
   const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") || "http://localhost:8000"
   const images = property.images && property.images.length > 0
-    ? property.images.map(img => (img.startsWith("http") ? img : `${baseUrl}${img}`))
+    ? property.images.map(img => {
+        if (img.startsWith("http") || img.startsWith("blob:") || img.startsWith("/")) {
+          return img
+        }
+        return `${baseUrl}${img.startsWith("/") ? img : "/" + img}`
+      })
     : ["/placeholder.svg"]
 
   const handlePreviousImage = () => {
