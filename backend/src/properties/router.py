@@ -134,16 +134,19 @@ def get_property_statistics(
     user_id: int = Depends(get_current_user_local_id),
     repository: PropertyRepository = Depends(get_property_repository),
 ):
-    """Obter estatísticas das propriedades"""
+    """Obter estatísticas das propriedades — uma única consulta GROUP BY"""
 
-    total = repository.count_by_user(user_id)
-    vacant = len(repository.get_vacant_properties(user_id))
-    occupied = len(repository.get_occupied_properties(user_id))
-    
+    counts = repository.count_by_status(user_id)
+    total = sum(counts.values())
+    occupied = counts.get("occupied", 0)
+    vacant = counts.get("vacant", 0)
+    maintenance = counts.get("maintenance", 0)
+
     return {
         "total": total,
         "vacant": vacant,
         "occupied": occupied,
+        "maintenance": maintenance,
         "occupancy_rate": (occupied / total * 100) if total > 0 else 0
     }
 

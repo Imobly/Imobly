@@ -185,6 +185,9 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
         await new Promise(resolve => setTimeout(resolve, 800))
         onOpenChange(false)
       }
+    } catch (error: any) {
+      console.error("Erro ao salvar propriedade:", error)
+      toast.error(error?.message || "Erro ao salvar propriedade. Verifique os dados e tente novamente.")
     } finally {
       setIsLoading(false)
     }
@@ -595,7 +598,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                                   type="button"
                                   variant="destructive"
                                   size="sm"
-                                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  className="absolute top-2 right-2"
                                   onClick={() => {
                                     // Remove do pendingFiles
                                     setFormData(prev => ({
@@ -626,7 +629,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                                 type="button"
                                 variant="destructive"
                                 size="sm"
-                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute top-2 right-2"
                                 onClick={() => handleRemoveImage(image, index)}
                               >
                                 <X className="h-3 w-3" />

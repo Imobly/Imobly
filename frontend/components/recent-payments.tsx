@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { RefreshCw } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -32,24 +32,26 @@ export function RecentPayments({ period = "6months" }: RecentPaymentsProps) {
   const [enrichedPayments, setEnrichedPayments] = useState<EnrichedPayment[]>([])
   const [loading, setLoading] = useState(true)
   
+  const enrichIdRef = useRef(0)
+
   useEffect(() => {
+    const enrichId = ++enrichIdRef.current
     const enrichPayments = async () => {
       if (paymentsLoading) return
-      
+
       try {
         // Pegar apenas os 2 últimos pagamentos ordenados por data de criação
         const recentPayments = [...payments]
           .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
           .slice(0, 2)
-        
+
         // Buscar informações de inquilino e propriedade
         const enriched = await Promise.all(
           recentPayments.map(async (payment) => {
             let tenant_name = 'Inquilino desconhecido'
             let property_address = 'Endereço não disponível'
-            
+
             try {
-              // Buscar inquilino
               if (payment.tenant_id) {
                 const tenant = await apiClient.get<{ name: string }>(`/tenants/${payment.tenant_id}/`)
                 if (tenant?.name) tenant_name = tenant.name
@@ -57,9 +59,8 @@ export function RecentPayments({ period = "6months" }: RecentPaymentsProps) {
             } catch (e) {
               console.error('Erro ao buscar inquilino:', e)
             }
-            
+
             try {
-              // Buscar propriedade
               if (payment.property_id) {
                 const property = await apiClient.get<{ address: string }>(`/properties/${payment.property_id}/`)
                 if (property?.address) property_address = property.address
@@ -67,7 +68,7 @@ export function RecentPayments({ period = "6months" }: RecentPaymentsProps) {
             } catch (e) {
               console.error('Erro ao buscar propriedade:', e)
             }
-            
+
             return {
               id: payment.id,
               total_amount: payment.total_amount,
@@ -77,15 +78,18 @@ export function RecentPayments({ period = "6months" }: RecentPaymentsProps) {
             }
           })
         )
-        
+
+        // Descartar resposta obsoleta (fetchs anteriores que demoraram mais)
+        if (enrichId !== enrichIdRef.current) return
         setEnrichedPayments(enriched)
       } catch (err) {
+        if (enrichId !== enrichIdRef.current) return
         console.error('Erro ao enriquecer pagamentos:', err)
       } finally {
-        setLoading(false)
+        if (enrichId === enrichIdRef.current) setLoading(false)
       }
     }
-    
+
     enrichPayments()
   }, [payments, paymentsLoading])
 

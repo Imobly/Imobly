@@ -58,7 +58,7 @@ interface TenantDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   tenant?: any | null
-  onSave: (tenant: TenantFormData) => void
+  onSave: (tenant: TenantFormData) => Promise<any>
 }
 
 const initialTenant: TenantFormData = {
@@ -98,11 +98,13 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
   const [uploadProgress, setUploadProgress] = useState(0)
   const [dragActive, setDragActive] = useState(false)
   const [selectedDocType, setSelectedDocType] = useState<'rg' | 'cpf' | 'cnh' | 'comprovante_residencia' | 'comprovante_renda' | 'contrato' | 'outros'>('rg')
+  const [pendingDocFiles, setPendingDocFiles] = useState<{ files: File[], docType: string }[]>([])
 
   // Carregar propriedades ao abrir o dialog
   useEffect(() => {
     if (open) {
       loadProperties()
+      setPendingDocFiles([])
     }
   }, [open])
 
@@ -149,7 +151,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
       const loadContractData = async () => {
         if (tenant.contract_id) {
           try {
-            const contract = await apiClient.get(`/contracts/${tenant.contract_id}/`)
+            const contract = await apiClient.get<any>(`/contracts/${tenant.contract_id}`)
             setFormData({
               name: tenant.name || "",
               email: tenant.email || "",
@@ -305,7 +307,33 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
     
     try {
       console.log("💾 Salvando inquilino:", formData)
-      await onSave(formData)
+      const savedTenant = await onSave(formData)
+
+      // Upload pending documents after tenant is saved
+      if (pendingDocFiles.length > 0 && savedTenant?.id) {
+        setUploadingDocs(true)
+        setUploadProgress(0)
+        let totalUploaded = 0
+        try {
+          for (const pending of pendingDocFiles) {
+            await tenantsService.uploadDocuments(
+              savedTenant.id,
+              pending.files,
+              pending.docType as any,
+              (progress) => setUploadProgress(progress)
+            )
+            totalUploaded += pending.files.length
+          }
+          toast.success(`${totalUploaded} documento(s) enviado(s) com sucesso!`)
+        } catch (uploadError: any) {
+          console.error("Erro ao fazer upload de documentos pendentes:", uploadError)
+          toast.error("Inquilino salvo, mas houve erro no upload de documentos")
+        } finally {
+          setUploadingDocs(false)
+          setUploadProgress(0)
+          setPendingDocFiles([])
+        }
+      }
     } finally {
       setIsLoading(false)
     }
@@ -326,11 +354,6 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
   }
 
   const handleDocumentUpload = async (files: FileList | File[]) => {
-    if (!tenant?.id) {
-      toast.error("Salve o inquilino antes de adicionar documentos")
-      return
-    }
-
     const fileArray = Array.from(files)
     if (fileArray.length === 0) return
 
@@ -349,6 +372,13 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
     
     if (oversizedFiles.length > 0) {
       toast.error("Cada arquivo deve ter no máximo 10MB")
+      return
+    }
+
+    // Se o inquilino ainda não foi salvo, armazenar arquivos para upload posterior
+    if (!tenant?.id) {
+      setPendingDocFiles(prev => [...prev, { files: fileArray, docType: selectedDocType }])
+      toast.success(`${fileArray.length} documento(s) adicionado(s) para envio após salvar`)
       return
     }
 
@@ -790,18 +820,10 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
                   <CardDescription>
                     {tenant?.id 
                       ? "Envie CNH, RG, contratos, comprovantes de renda, etc." 
-                      : "Salve o inquilino primeiro para adicionar documentos"}
+                      : "Selecione documentos agora — serão enviados automaticamente ao salvar"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {!tenant?.id ? (
-                    <div className="flex justify-center p-8 bg-gray-50 rounded-lg border-2 border-dashed">
-                      <div className="text-center">
-                        <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-500">Salve o inquilino primeiro para adicionar documentos</p>
-                      </div>
-                    </div>
-                  ) : (
                     <>
                       {/* Área de Upload */}
                       <div
@@ -883,8 +905,48 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
                           </div>
                         </div>
                       )}
+
+                      {/* Pending Files (not yet uploaded - for new tenants) */}
+                      {pendingDocFiles.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>Documentos Pendentes (serão enviados ao salvar)</Label>
+                          <div className="space-y-2">
+                            {pendingDocFiles.map((pending, idx) =>
+                              pending.files.map((file, fIdx) => (
+                                <div key={`pending-${idx}-${fIdx}`} className="flex items-center justify-between p-3 border rounded-lg bg-amber-50 border-amber-200">
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <FileText className="h-5 w-5 text-amber-600" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium">{file.name}</p>
+                                      <p className="text-xs text-amber-600">
+                                        {getDocTypeLabel(pending.docType)} — aguardando envio
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setPendingDocFiles(prev => {
+                                        const updated = [...prev]
+                                        updated[idx] = {
+                                          ...updated[idx],
+                                          files: updated[idx].files.filter((_, i) => i !== fIdx)
+                                        }
+                                        return updated.filter(p => p.files.length > 0)
+                                      })
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </>
-                  )}
                 </CardContent>
               </Card>
             </TabsContent>

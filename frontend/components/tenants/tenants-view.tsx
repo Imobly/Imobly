@@ -81,9 +81,23 @@ export function TenantsView() {
       
       // Separar dados do contrato dos dados do inquilino
       const { contract, contract_id, ...tenantOnly } = tenantData
-      
+
+      // ── Sanitização antes de enviar ao backend ─────────────────────────────
+      // 1. emergency_contact vazio → undefined  (min_length=1 causaria 422)
+      const ec = tenantOnly.emergency_contact
+      if (ec && !ec.name?.trim() && !ec.phone?.trim() && !ec.relationship?.trim()) {
+        tenantOnly.emergency_contact = undefined
+      }
+      // 2. Documentos: remover entradas não enviadas ao Supabase (sem URL http)
+      if (tenantOnly.documents) {
+        tenantOnly.documents = tenantOnly.documents.filter(
+          (doc: any) => doc.url && doc.url.startsWith('http')
+        )
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       console.log("📋 Dados do contrato separados:", JSON.stringify(contract, null, 2))
-      console.log("👤 Dados do inquilino separados:", JSON.stringify(tenantOnly, null, 2))
+      console.log("👤 Dados do inquilino (sanitizado):", JSON.stringify(tenantOnly, null, 2))
       
       let savedTenant: any
       let savedContract: any = null
@@ -136,6 +150,9 @@ export function TenantsView() {
         }
         
         savedTenant = await updateTenant(selectedTenant.id, tenantPayload)
+        if (!savedTenant) {
+          throw new Error('Falha ao atualizar inquilino. Verifique os dados e tente novamente.')
+        }
         console.log("✅ Inquilino atualizado:", savedTenant)
         
       } else {
@@ -144,6 +161,9 @@ export function TenantsView() {
         // Primeiro criar o inquilino SEM contract_id
         const tenantPayload: any = { ...tenantOnly }
         savedTenant = await createTenant(tenantPayload)
+        if (!savedTenant) {
+          throw new Error('Falha ao criar inquilino. Verifique os dados e tente novamente.')
+        }
         console.log("✅ Inquilino criado:", savedTenant)
         
         // Se tem dados de contrato, criar contrato COM o tenant_id agora
@@ -187,6 +207,8 @@ export function TenantsView() {
       } else {
         toast.success('Inquilino salvo com sucesso!')
       }
+
+      return savedTenant
     } catch (error: any) {
       console.error('❌ Erro ao salvar inquilino:', error)
       toast.error(`Erro ao salvar: ${error.message || 'Verifique os dados e tente novamente.'}`)

@@ -14,6 +14,7 @@ import { PropertyFilters } from "@/components/properties/property-filters"
 import { useProperties } from "@/lib/hooks/useProperties"
 import { Property, convertApiToProperty, convertPropertyToApi } from "@/lib/types/property"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { toast } from "sonner"
 
 export function PropertiesView() {
   const { properties, loading, error, refetch, createProperty, updateProperty, deleteProperty } = useProperties()
@@ -93,30 +94,24 @@ export function PropertiesView() {
   }
 
   const handleSave = async (propertyData: Property) => {
-    try {
-      // Converter dados do formulário para formato da API
-      const apiData = convertPropertyToApi(propertyData)
-      
-      console.log("💾 Salvando propriedade:", apiData)
-      
-      let savedProperty
-      if (selectedProperty) {
-        savedProperty = await updateProperty(selectedProperty.id, apiData)
-        console.log("✅ Propriedade atualizada:", savedProperty)
-      } else {
-        savedProperty = await createProperty(apiData)
-        console.log("✅ Propriedade criada:", savedProperty)
-      }
-      
-      setShowDialog(false)
-      await refetch()
-      
-      // Retornar a propriedade salva (convertida para formato local)
-      return savedProperty ? convertApiToProperty(savedProperty) : undefined
-    } catch (error) {
-      console.error("❌ Erro ao salvar propriedade:", error)
-      return undefined
+    // Converter dados do formulário para formato da API
+    const apiData = convertPropertyToApi(propertyData)
+    console.log("💾 Salvando propriedade:", apiData)
+
+    // May throw — let the dialog's handleSubmit catch it
+    let savedProperty
+    if (selectedProperty) {
+      savedProperty = await updateProperty(selectedProperty.id, apiData)
+      console.log("✅ Propriedade atualizada:", savedProperty)
+    } else {
+      savedProperty = await createProperty(apiData)
+      console.log("✅ Propriedade criada:", savedProperty)
     }
+
+    // Do NOT close the dialog or refetch here.
+    // The dialog controls its own closing (onOpenChange) after any pending
+    // image uploads finish.  Refetch is triggered by the onOpenChange handler below.
+    return savedProperty ? convertApiToProperty(savedProperty) : undefined
   }
 
   const handleDelete = async (id: number) => {
@@ -314,7 +309,11 @@ export function PropertiesView() {
       {/* Dialog */}
       <PropertyDialog
         open={showDialog}
-        onOpenChange={setShowDialog}
+        onOpenChange={(open) => {
+          setShowDialog(open)
+          // Refetch AFTER the dialog closes so the list reflects any image uploads
+          if (!open) refetch()
+        }}
         property={selectedProperty}
         onSave={handleSave}
       />

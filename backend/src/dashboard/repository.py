@@ -6,7 +6,7 @@ from typing import Dict, Any
 from decimal import Decimal
 from datetime import datetime, date
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, and_, case
 
 # Importar os models dos outros módulos
 from src.properties.models import Property
@@ -22,131 +22,173 @@ class DashboardRepository:
         self.db = db
 
     def get_property_stats(self, user_id: int) -> Dict[str, Any]:
-        """Obter estatísticas de propriedades"""
-        total_properties = self.db.query(func.count(Property.id)).filter(
-            Property.user_id == user_id
-        ).scalar() or 0
-
-        vacant_properties = self.db.query(func.count(Property.id)).filter(
-            Property.user_id == user_id,
-            Property.status == "vacant"
-        ).scalar() or 0
-
-        occupied_properties = self.db.query(func.count(Property.id)).filter(
-            Property.user_id == user_id,
-            Property.status == "occupied"
-        ).scalar() or 0
-
-        maintenance_properties = self.db.query(func.count(Property.id)).filter(
-            Property.user_id == user_id,
-            Property.status == "maintenance"
-        ).scalar() or 0
+        """Obter estatísticas de propriedades — 1 query GROUP BY"""
+        rows = (
+            self.db.query(Property.status, func.count(Property.id).label("count"))
+            .filter(Property.user_id == user_id)
+            .group_by(Property.status)
+            .all()
+        )
+        counts = {status: cnt for status, cnt in rows}
+        total = sum(counts.values())
+        occupied = counts.get("occupied", 0)
 
         return {
-            "total": total_properties,
-            "vacant": vacant_properties,
-            "occupied": occupied_properties,
-            "maintenance": maintenance_properties,
-            "occupancy_rate": (occupied_properties / total_properties * 100) if total_properties > 0 else 0
+            "total": total,
+            "vacant": counts.get("vacant", 0),
+            "occupied": occupied,
+            "maintenance": counts.get("maintenance", 0),
+            "occupancy_rate": (occupied / total * 100) if total > 0 else 0
         }
 
     def get_tenant_stats(self, user_id: int) -> Dict[str, Any]:
-        """Obter estatísticas de inquilinos"""
-        total_tenants = self.db.query(func.count(Tenant.id)).filter(
-            Tenant.user_id == user_id
-        ).scalar() or 0
-
-        active_tenants = self.db.query(func.count(Tenant.id)).filter(
-            Tenant.user_id == user_id,
-            Tenant.status == "active"
-        ).scalar() or 0
-
-        inactive_tenants = self.db.query(func.count(Tenant.id)).filter(
-            Tenant.user_id == user_id,
-            Tenant.status == "inactive"
-        ).scalar() or 0
+        """Obter estatísticas de inquilinos — 1 query GROUP BY"""
+        rows = (
+            self.db.query(Tenant.status, func.count(Tenant.id).label("count"))
+            .filter(Tenant.user_id == user_id)
+            .group_by(Tenant.status)
+            .all()
+        )
+        counts = {status: cnt for status, cnt in rows}
+        total = sum(counts.values())
 
         return {
-            "total": total_tenants,
-            "active": active_tenants,
-            "inactive": inactive_tenants
+            "total": total,
+            "active": counts.get("active", 0),
+            "inactive": counts.get("inactive", 0)
         }
 
     def get_financial_stats(self, user_id: int) -> Dict[str, Any]:
-        """Obter estatísticas financeiras"""
+        """Obter estatísticas financeiras — 2 queries ao invés de 4"""
         current_month = date.today().month
         current_year = date.today().year
 
-        # Recebimentos do mês
-        monthly_income = self.db.query(func.sum(Payment.total_amount)).filter(
-            Payment.user_id == user_id,
-            Payment.status == "paid",
-            extract('month', Payment.payment_date) == current_month,
-            extract('year', Payment.payment_date) == current_year
-        ).scalar() or Decimal('0')
+        # Uma única query com agregação condicional para os três KPIs de pagamento
+        result = (
+            self.db.query(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Payment.status == "paid",
+                                extract("month", Payment.payment_date) == current_month,
+                                extract("year", Payment.payment_date) == current_year,
+                            ),
+                            Payment.total_amount,
+                        ),
+                        else_=0,
+                    )
+                ).label("monthly_income"),
+                func.sum(
+                    case(
+                        (Payment.status == "pending", Payment.total_amount),
+                        else_=0,
+                    )
+                ).label("pending_payments"),
+                func.sum(
+                    case(
+                        (Payment.status == "overdue", Payment.total_amount),
+                        else_=0,
+                    )
+                ).label("overdue_payments"),
+            )
+            .filter(Payment.user_id == user_id)
+            .first()
+        )
 
-        # Despesas do mês
-        monthly_expenses = self.db.query(func.sum(Expense.amount)).filter(
-            Expense.user_id == user_id,
-            extract('month', Expense.date) == current_month,
-            extract('year', Expense.date) == current_year
-        ).scalar() or Decimal('0')
+        # Despesas do mês (tabela separada — mantemos 1 query)
+        monthly_expenses = (
+            self.db.query(func.sum(Expense.amount))
+            .filter(
+                Expense.user_id == user_id,
+                extract("month", Expense.date) == current_month,
+                extract("year", Expense.date) == current_year,
+            )
+            .scalar()
+            or Decimal("0")
+        )
 
-        # Pagamentos pendentes
-        pending_payments = self.db.query(func.sum(Payment.total_amount)).filter(
-            Payment.user_id == user_id,
-            Payment.status == "pending"
-        ).scalar() or Decimal('0')
-
-        # Pagamentos em atraso
-        overdue_payments = self.db.query(func.sum(Payment.total_amount)).filter(
-            Payment.user_id == user_id,
-            Payment.status == "overdue"
-        ).scalar() or Decimal('0')
+        monthly_income = Decimal(str(result.monthly_income or 0))
+        pending_payments = Decimal(str(result.pending_payments or 0))
+        overdue_payments = Decimal(str(result.overdue_payments or 0))
 
         return {
             "monthly_income": float(monthly_income),
             "monthly_expenses": float(monthly_expenses),
             "monthly_profit": float(monthly_income - monthly_expenses),
             "pending_payments": float(pending_payments),
-            "overdue_payments": float(overdue_payments)
+            "overdue_payments": float(overdue_payments),
         }
 
     def get_monthly_revenue_trend(self, user_id: int, months: int = 12) -> list:
-        """Obter tendência de receita mensal"""
-        current_date = date.today()
-        results = []
+        """Obter tendência de receita mensal — 2 queries GROUP BY ao invés de 2×months queries em loop"""
+        today = date.today()
 
+        # Calcular o primeiro dia do mês inicial do período
+        start_month = today.month - months + 1
+        start_year = today.year
+        while start_month <= 0:
+            start_month += 12
+            start_year -= 1
+        start_date = date(start_year, start_month, 1)
+
+        # 1 query para receitas agrupadas por ano/mês
+        revenue_rows = (
+            self.db.query(
+                extract("year", Payment.payment_date).label("year"),
+                extract("month", Payment.payment_date).label("month"),
+                func.sum(Payment.total_amount).label("total"),
+            )
+            .filter(
+                Payment.user_id == user_id,
+                Payment.status == "paid",
+                Payment.payment_date >= start_date,
+            )
+            .group_by(
+                extract("year", Payment.payment_date),
+                extract("month", Payment.payment_date),
+            )
+            .all()
+        )
+
+        # 1 query para despesas agrupadas por ano/mês
+        expense_rows = (
+            self.db.query(
+                extract("year", Expense.date).label("year"),
+                extract("month", Expense.date).label("month"),
+                func.sum(Expense.amount).label("total"),
+            )
+            .filter(
+                Expense.user_id == user_id,
+                Expense.date >= start_date,
+            )
+            .group_by(
+                extract("year", Expense.date),
+                extract("month", Expense.date),
+            )
+            .all()
+        )
+
+        # Lookup rápido por (ano, mês)
+        revenue_map = {(int(r.year), int(r.month)): float(r.total or 0) for r in revenue_rows}
+        expense_map = {(int(r.year), int(r.month)): float(r.total or 0) for r in expense_rows}
+
+        # Gerar lista completa de meses no período
+        results = []
         for i in range(months):
-            # Calcular mês e ano
-            month = current_date.month - i
-            year = current_date.year
-            
+            month = today.month - i
+            year = today.year
             if month <= 0:
                 month += 12
                 year -= 1
-
-            # Buscar receita do mês
-            revenue = self.db.query(func.sum(Payment.total_amount)).filter(
-                Payment.user_id == user_id,
-                Payment.status == "paid",
-                extract('month', Payment.payment_date) == month,
-                extract('year', Payment.payment_date) == year
-            ).scalar() or Decimal('0')
-
-            # Buscar despesas do mês
-            expenses = self.db.query(func.sum(Expense.amount)).filter(
-                Expense.user_id == user_id,
-                extract('month', Expense.date) == month,
-                extract('year', Expense.date) == year
-            ).scalar() or Decimal('0')
-
+            rev = revenue_map.get((year, month), 0.0)
+            exp = expense_map.get((year, month), 0.0)
             results.append({
                 "month": month,
                 "year": year,
-                "revenue": float(revenue),
-                "expenses": float(expenses),
-                "profit": float(revenue - expenses)
+                "revenue": rev,
+                "expenses": exp,
+                "profit": rev - exp,
             })
 
         return sorted(results, key=lambda x: (x["year"], x["month"]))

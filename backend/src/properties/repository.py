@@ -2,9 +2,9 @@
 Repository para operações com propriedades
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from .models import Property
 from .schema import PropertyCreate, PropertyUpdate, PropertyCreateInternal
@@ -132,3 +132,13 @@ class PropertyRepository:
     def get_occupied_properties(self, user_id: int) -> List[Property]:
         """Obter propriedades ocupadas"""
         return self.get_by_status(user_id, "occupied")
+
+    def count_by_status(self, user_id: int) -> Dict[str, int]:
+        """Contar propriedades por status em uma única consulta SQL (GROUP BY)"""
+        rows = (
+            self.db.query(Property.status, func.count(Property.id))
+            .filter(Property.user_id == user_id)
+            .group_by(Property.status)
+            .all()
+        )
+        return {status: count for status, count in rows}

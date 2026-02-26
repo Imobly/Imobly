@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Building2, MapPin, User, RefreshCw } from "lucide-react"
@@ -32,7 +32,10 @@ export function PropertyStatusGrid({ period = "6months" }: PropertyStatusGridPro
   const { data, loading, error } = usePropertiesStatus(period)
   const [enrichedProperties, setEnrichedProperties] = useState<any[]>([])
 
+  const enrichIdRef = useRef(0)
+
   useEffect(() => {
+    const enrichId = ++enrichIdRef.current
     const enrichProperties = async () => {
       if (!data || !data.properties || data.properties.length === 0) {
         setEnrichedProperties([])
@@ -41,10 +44,8 @@ export function PropertyStatusGrid({ period = "6months" }: PropertyStatusGridPro
 
       const enriched = await Promise.all(
         data.properties.map(async (property) => {
-          // Somente tenta enriquecer quando ocupada
           if (property.status === 'occupied') {
             try {
-              // Preferir busca direta por tenant_id do imóvel se existir
               // @ts-ignore: backend retorna tenant_id no objeto de propriedade
               if ((property as any).tenant_id) {
                 try {
@@ -68,6 +69,9 @@ export function PropertyStatusGrid({ period = "6months" }: PropertyStatusGridPro
           return property
         })
       )
+
+      // Descartar resposta obsoleta
+      if (enrichId !== enrichIdRef.current) return
       setEnrichedProperties(enriched)
     }
 

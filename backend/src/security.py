@@ -5,7 +5,7 @@ Lógica de JWT, hash de senha e autenticação via Supabase
 """
 
 from typing import Optional
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, Request, status, Depends
 from fastapi.security import HTTPBearer
 from fastapi.security.http import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -129,29 +129,36 @@ async def get_current_user_id(
 
 
 async def get_current_user_local_id(
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> int:
     """
-    Dependency para obter o ID integer do usuário na tabela local
+    Dependency para obter o ID integer do usuário na tabela local.
+    O resultado é cacheado em request.state para evitar múltiplas
+    consultas SELECT FROM users na mesma requisição.
     """
+    # Retorna do cache se já resolvido nesta requisição
+    if hasattr(request.state, "user_local_id"):
+        return request.state.user_local_id
+
     from src.auth.models import User
-    
+
     email = current_user.get("email")
     if not email:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email não encontrado no token"
         )
-    
+
     # Busca usuário na tabela local
     user = db.query(User).filter(User.email == email).first()
-    
+
     if not user:
         # Se não existe, cria com as informações disponíveis
         supabase_id = current_user["id"]
         username = email.split("@")[0]
-        
+
         user = User(
             email=email,
             username=username,
@@ -164,7 +171,9 @@ async def get_current_user_local_id(
         db.commit()
         db.refresh(user)
         logger.info(f"Usuário local criado automaticamente: {email} (id={user.id})")
-    
+
+    # Armazena no estado da requisição para reutilização por outras dependencies
+    request.state.user_local_id = user.id
     return user.id
 
 

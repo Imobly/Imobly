@@ -94,7 +94,7 @@ export function DashboardOverview() {
           <CardContent>
             <div className="text-xl font-bold">{summary?.properties.total || 0}</div>
             <p className="text-xs text-gray-600">
-              <span className="text-green-600">{summary?.properties.occupied || 0} ocupados</span>
+              <span className="text-green-600">{summary?.properties.occupied_units || 0} ocupados</span>
             </p>
           </CardContent>
         </Card>

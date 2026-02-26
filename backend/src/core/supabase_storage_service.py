@@ -120,7 +120,7 @@ class SupabaseStorageService:
                 file=file_content,
                 file_options={
                     "content-type": content_type,
-                    "upsert": "false"
+                    "upsert": "true"
                 }
             )
             
