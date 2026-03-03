@@ -14,6 +14,7 @@ from .schema import (
     NotificationCreateInternal,
     NotificationResponse,
     NotificationUpdate,
+    PaginatedNotifications,
 )
 
 router = APIRouter()
@@ -27,17 +28,25 @@ def get_repo(db: Session = Depends(get_db)) -> NotificationRepository:
 # Static routes — defined BEFORE /{notification_id} to avoid 405
 # ─────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[NotificationResponse])
+@router.get("/", response_model=PaginatedNotifications)
 def list_notifications(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     read: Optional[bool] = Query(None, description="Filtrar por status de leitura"),
+    only_unread: bool = Query(False, description="Retornar apenas não lidas"),
     type: Optional[str] = Query(None, description="Filtrar por tipo"),
     user_id: int = Depends(get_current_user_local_id),
     repo: NotificationRepository = Depends(get_repo),
 ):
-    """Listar notificações com filtros opcionais"""
-    return repo.get_by_user(user_id, skip=skip, limit=limit, read=read, type=type)
+    """
+    Listar notificações com paginação, ordenação (mais recentes primeiro)
+    e filtro booleano only_unread.
+    """
+    items, total = repo.get_by_user(
+        user_id, skip=skip, limit=limit, read=read,
+        type=type, only_unread=only_unread,
+    )
+    return PaginatedNotifications(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.post("/", response_model=NotificationResponse, status_code=status.HTTP_201_CREATED)
@@ -85,133 +94,16 @@ def process_background_tasks(
     db: Session = Depends(get_db),
 ):
     """
-    Processar tarefas de background:
+    Processar tarefas de background manualmente:
     - Atualizar status de pagamentos vencidos
-    - Gerar notificações de contratos prestes a vencer
-    - Gerar lembretes de pagamento
+    - Gerar notificações de inadimplência
+    - Gerar notificações de contratos prestes a vencer (30/60/90 dias)
+    - Gerar lembretes de pagamento (próximos 3 dias)
+    Usa lógica antispam (7 dias) e inclui metadata JSON.
     """
-    from datetime import date
-    from src.payments.models import Payment
-    from src.contracts.models import Contract
+    from src.scheduler import run_background_checks
 
-    today = date.today()
-
-    # 1. Atualizar pagamentos vencidos
-    pending_to_overdue = (
-        db.query(Payment)
-        .filter(
-            Payment.user_id == user_id,
-            Payment.status == "pending",
-            Payment.due_date < today,
-        )
-        .update({"status": "overdue"}, synchronize_session=False)
-    )
-    db.commit()
-
-    total_overdue = db.query(Payment).filter(Payment.user_id == user_id, Payment.status == "overdue").count()
-    total_pending = db.query(Payment).filter(Payment.user_id == user_id, Payment.status == "pending").count()
-    total_paid = db.query(Payment).filter(Payment.user_id == user_id, Payment.status == "paid").count()
-    total_partial = db.query(Payment).filter(Payment.user_id == user_id, Payment.status == "partial").count()
-
-    # 2. Notificações de contratos expirando em ≤30 dias
-    from datetime import timedelta
-    from .repository import NotificationRepository
-
-    repo = NotificationRepository(db)
-    expiring_threshold = today + timedelta(days=30)
-    expiring_contracts = (
-        db.query(Contract)
-        .filter(
-            Contract.user_id == user_id,
-            Contract.status == "active",
-            Contract.end_date <= expiring_threshold,
-            Contract.end_date >= today,
-        )
-        .all()
-    )
-
-    contract_notifications = 0
-    for contract in expiring_contracts:
-        days_left = (contract.end_date - today).days
-        # Avoid duplicate notifications (same contract, same day)
-        existing = (
-            db.query(__import__("src.notifications.models", fromlist=["Notification"]).Notification)
-            .filter_by(
-                user_id=user_id,
-                type="contract_expiring",
-                related_id=str(contract.id),
-                date=today,
-            )
-            .first()
-        )
-        if not existing:
-            repo.create(NotificationCreateInternal(
-                user_id=user_id,
-                type="contract_expiring",
-                title=f"Contrato vence em {days_left} dias",
-                message=f"O contrato #{contract.id} vence em {contract.end_date}.",
-                date=today,
-                priority="high" if days_left <= 7 else "medium",
-                read_status=False,
-                action_required=True,
-                related_id=str(contract.id),
-                related_type="contract",
-            ))
-            contract_notifications += 1
-
-    # 3. Lembretes de pagamento (vencimento nos próximos 3 dias)
-    reminder_threshold = today + timedelta(days=3)
-    upcoming_payments = (
-        db.query(Payment)
-        .filter(
-            Payment.user_id == user_id,
-            Payment.status == "pending",
-            Payment.due_date <= reminder_threshold,
-            Payment.due_date >= today,
-        )
-        .all()
-    )
-
-    payment_reminders = 0
-    for payment in upcoming_payments:
-        days_left = (payment.due_date - today).days
-        existing = (
-            db.query(__import__("src.notifications.models", fromlist=["Notification"]).Notification)
-            .filter_by(
-                user_id=user_id,
-                type="reminder",
-                related_id=str(payment.id),
-                date=today,
-            )
-            .first()
-        )
-        if not existing:
-            repo.create(NotificationCreateInternal(
-                user_id=user_id,
-                type="reminder",
-                title=f"Pagamento vence em {days_left} dia(s)",
-                message=f"O pagamento #{payment.id} vence em {payment.due_date}.",
-                date=today,
-                priority="high" if days_left == 0 else "medium",
-                read_status=False,
-                action_required=True,
-                related_id=str(payment.id),
-                related_type="payment",
-            ))
-            payment_reminders += 1
-
-    return {
-        "payment_status_changes": {
-            "pending_to_overdue": pending_to_overdue,
-            "total_overdue": total_overdue,
-            "total_pending": total_pending,
-            "total_paid": total_paid,
-            "total_partial": total_partial,
-        },
-        "contract_notifications": contract_notifications,
-        "payment_reminders": payment_reminders,
-        "overdue_notifications": 0,
-    }
+    return run_background_checks(db, user_id)
 
 
 @router.delete("/cleanup/")

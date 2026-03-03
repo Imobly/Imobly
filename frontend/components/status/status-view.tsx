@@ -64,7 +64,7 @@ const systemStatuses: SystemStatus[] = [
     issues: ["5 pagamentos em atraso", "2 falhas de processamento"],
   },
   {
-    name: "Despesas e Manutenção",
+    name: "Despesas",
     status: "warning",
     uptime: 99.1,
     lastCheck: "2024-01-20T10:26:00",

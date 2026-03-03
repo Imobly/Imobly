@@ -2,9 +2,11 @@
 Repository para operações do dashboard (KPIs e agregações)
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 from decimal import Decimal
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, and_, case
 
@@ -13,6 +15,9 @@ from src.properties.models import Property
 from src.tenants.models import Tenant  
 from src.payments.models import Payment
 from src.expenses.models import Expense
+from src.contracts.models import Contract
+
+BRT = ZoneInfo("America/Sao_Paulo")
 
 
 class DashboardRepository:
@@ -203,5 +208,151 @@ class DashboardRepository:
             "properties": property_stats,
             "tenants": tenant_stats,
             "financial": financial_stats,
-            "updated_at": datetime.utcnow().isoformat()
+            "updated_at": datetime.now(BRT).isoformat()
+        }
+
+    # ────────────────────────────────────────────────────────────
+    # GET /dashboard/summary — endpoint consolidado
+    # ────────────────────────────────────────────────────────────
+
+    def get_summary(self, user_id: int) -> Dict[str, Any]:
+        """
+        Retorna objeto consolidado para o frontend:
+        overview, financeiro, alertas_contratos, inadimplencia
+        """
+        today = datetime.now(BRT).date()
+
+        # ── overview ──
+        property_stats = self.get_property_stats(user_id)
+
+        active_contracts = (
+            self.db.query(func.count(Contract.id))
+            .filter(Contract.user_id == user_id, Contract.status == "active")
+            .scalar() or 0
+        )
+        inactive_contracts = (
+            self.db.query(func.count(Contract.id))
+            .filter(Contract.user_id == user_id, Contract.status.in_(["expired", "terminated"]))
+            .scalar() or 0
+        )
+
+        overview = {
+            "active_contracts": active_contracts,
+            "inactive_contracts": inactive_contracts,
+            "occupancy_rate": property_stats.get("occupancy_rate", 0),
+        }
+
+        # ── financeiro (mês atual, fuso BRT) ──
+        current_month = today.month
+        current_year = today.year
+
+        receitas_pagas = (
+            self.db.query(func.sum(Payment.total_amount))
+            .filter(
+                Payment.user_id == user_id,
+                Payment.status == "paid",
+                extract("month", Payment.payment_date) == current_month,
+                extract("year", Payment.payment_date) == current_year,
+            )
+            .scalar() or Decimal("0")
+        )
+
+        despesas_pagas = (
+            self.db.query(func.sum(Expense.amount))
+            .filter(
+                Expense.user_id == user_id,
+                extract("month", Expense.date) == current_month,
+                extract("year", Expense.date) == current_year,
+            )
+            .scalar() or Decimal("0")
+        )
+
+        financeiro = {
+            "receitas_pagas": float(receitas_pagas),
+            "despesas_pagas": float(despesas_pagas),
+            "saldo": float(Decimal(str(receitas_pagas)) - Decimal(str(despesas_pagas))),
+        }
+
+        # ── alertas_contratos — 1 query com CASE ──
+        alertas = (
+            self.db.query(
+                func.count(case(
+                    (Contract.end_date <= today + timedelta(days=30), Contract.id),
+                )).label("d30"),
+                func.count(case(
+                    (and_(
+                        Contract.end_date > today + timedelta(days=30),
+                        Contract.end_date <= today + timedelta(days=60),
+                    ), Contract.id),
+                )).label("d60"),
+                func.count(case(
+                    (and_(
+                        Contract.end_date > today + timedelta(days=60),
+                        Contract.end_date <= today + timedelta(days=90),
+                    ), Contract.id),
+                )).label("d90"),
+            )
+            .filter(
+                Contract.user_id == user_id,
+                Contract.status == "active",
+                Contract.end_date >= today,
+                Contract.end_date <= today + timedelta(days=90),
+            )
+            .first()
+        )
+
+        alertas_contratos = {
+            "vencendo_30d": alertas.d30 if alertas else 0,
+            "vencendo_60d": alertas.d60 if alertas else 0,
+            "vencendo_90d": alertas.d90 if alertas else 0,
+        }
+
+        # ── inadimplencia — JOIN Payment + Tenant + Property ──
+        delinquent_rows = (
+            self.db.query(
+                Payment.tenant_id,
+                Tenant.name.label("tenant_name"),
+                Payment.property_id,
+                Property.name.label("property_name"),
+                Payment.total_amount.label("amount"),
+                Payment.due_date,
+                Payment.status,
+            )
+            .join(Tenant, Payment.tenant_id == Tenant.id)
+            .join(Property, Payment.property_id == Property.id)
+            .filter(
+                Payment.user_id == user_id,
+                Payment.status.in_(["overdue", "partial"]),
+            )
+            .order_by(Payment.due_date.asc())
+            .all()
+        )
+
+        atrasados: List[Dict[str, Any]] = []
+        parciais: List[Dict[str, Any]] = []
+        for row in delinquent_rows:
+            item = {
+                "tenant_id": row.tenant_id,
+                "tenant_name": row.tenant_name,
+                "property_id": row.property_id,
+                "property_name": row.property_name,
+                "amount": float(row.amount),
+                "due_date": row.due_date,
+                "status": row.status,
+            }
+            if row.status == "overdue":
+                atrasados.append(item)
+            else:
+                parciais.append(item)
+
+        inadimplencia = {
+            "atrasados": atrasados,
+            "parciais": parciais,
+        }
+
+        return {
+            "overview": overview,
+            "financeiro": financeiro,
+            "alertas_contratos": alertas_contratos,
+            "inadimplencia": inadimplencia,
         }

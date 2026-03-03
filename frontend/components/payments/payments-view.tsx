@@ -74,7 +74,10 @@ export function PaymentsView() {
     .filter((p) => p.status === "paid")
     .reduce((sum, payment) => sum + payment.total_amount, 0)
   const pendingAmount = payments
-    .filter((p) => p.status === "pending" || p.status === "partial" || p.status === "overdue")
+    .filter((p) => p.status === "pending")
+    .reduce((sum, payment) => sum + payment.total_amount, 0)
+  const overdueAmount = payments
+    .filter((p) => p.status === "overdue")
     .reduce((sum, payment) => sum + payment.total_amount, 0)
 
   const handleCreatePayment = () => {
@@ -169,7 +172,7 @@ export function PaymentsView() {
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{statusCounts.pending}</div>
             <p className="text-xs text-muted-foreground">
-              Aguardando pagamento
+              {currencyFormat(pendingAmount)} pendentes
             </p>
           </CardContent>
         </Card>
@@ -182,7 +185,7 @@ export function PaymentsView() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{statusCounts.overdue}</div>
             <p className="text-xs text-muted-foreground">
-              {currencyFormat(pendingAmount)} pendentes
+              {currencyFormat(overdueAmount)} em atraso
             </p>
           </CardContent>
         </Card>

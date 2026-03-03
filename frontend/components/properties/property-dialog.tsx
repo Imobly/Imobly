@@ -21,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Upload, X, Plus, Edit, Building, Loader2 } from "lucide-react"
 import { Property } from "@/lib/types/property"
 import { useTenants } from "@/lib/hooks/useTenants"
+import { useAuth } from "@/lib/contexts/auth"
 import { integerMask, currencyMask, currencyUnmask, areaMask, cepMask } from "@/lib/utils/masks"
 import { propertiesService } from "@/lib/api/properties"
 import { toast } from "sonner"
@@ -58,6 +59,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
   const [uploadProgress, setUploadProgress] = useState(0)
   const [dragActive, setDragActive] = useState(false)
   const { tenants } = useTenants()
+  const { user } = useAuth()
 
   useEffect(() => {
     if (property) {
@@ -155,6 +157,8 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
           const result = await propertiesService.uploadImages(
             savedProperty.id,
             pendingFiles,
+            user!.id,
+            savedProperty.images || [],
             (progress) => setUploadProgress(progress)
           )
           
@@ -239,6 +243,8 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
       const result = await propertiesService.uploadImages(
         property.id,
         fileArray,
+        user!.id,
+        formData.images || [],
         (progress) => setUploadProgress(progress)
       )
 
@@ -266,12 +272,12 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
     }
 
     try {
-      const result = await propertiesService.deleteImage(property.id, index)
+      const result = await propertiesService.deleteImage(property.id, index, formData.images || [])
       setFormData((prev) => ({ ...prev, images: result.property.images || [] }))
       toast.success("Imagem removida com sucesso")
     } catch (error: any) {
       console.error("Erro ao deletar imagem:", error)
-      toast.error(error.response?.data?.detail || "Erro ao remover imagem")
+      toast.error(error?.message || "Erro ao remover imagem")
     }
   }
 

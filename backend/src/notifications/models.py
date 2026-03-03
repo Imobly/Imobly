@@ -3,7 +3,7 @@ Modelo SQLAlchemy para o módulo de notificações
 """
 
 from datetime import date, datetime
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, JSON, String, Text, func
 
 from src.database import Base
 
@@ -32,6 +32,13 @@ class Notification(Base):
     # Referência para entidade relacionada
     related_id = Column(String(50), nullable=True)
     related_type = Column(String(50), nullable=True)  # contract | payment | maintenance | property
+
+    # Link opcional
+    link = Column(Text, nullable=True)
+
+    # Metadados JSON (property_id, tenant_id, etc.)
+    # 'metadata' é reservado pelo SQLAlchemy Declarative; usamos outro nome de atributo
+    notification_metadata = Column("metadata", JSON, nullable=True)
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

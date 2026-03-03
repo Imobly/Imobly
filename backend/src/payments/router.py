@@ -167,7 +167,36 @@ def register_payment(
         payment_method=data.payment_method,
         description=data.description,
     )
-    return repository.create(internal)
+    new_payment = repository.create(internal)
+
+    # ── Notificação automática de pagamento parcial ──
+    if pay_status == "partial":
+        from src.notifications.repository import NotificationRepository
+        from src.notifications.schema import NotificationCreateInternal as NotifCreate
+
+        NotificationRepository(db).create(NotifCreate(
+            user_id=user_id,
+            type="partial_payment",
+            title="Pagamento parcial registrado",
+            message=(
+                f"Pagamento #{new_payment.id} — pago R$ {paid:.2f} "
+                f"de R$ {total_expected:.2f}"
+            ),
+            date=date.today(),
+            priority="medium",
+            read_status=False,
+            action_required=True,
+            related_id=str(new_payment.id),
+            related_type="payment",
+            metadata={
+                "property_id": property_id,
+                "tenant_id": tenant_id,
+                "paid_amount": round(paid, 2),
+                "total_expected": round(total_expected, 2),
+            },
+        ))
+
+    return new_payment
 
 
 @router.get("/overdue/list", response_model=List[PaymentResponse])

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Upload, Loader2, X, FileText } from "lucide-react"
 import { useProperties } from "@/lib/hooks/useProperties"
+import { useAuth } from "@/lib/contexts/auth"
 import { currencyMask, currencyUnmask } from "@/lib/utils/masks"
 import { expensesService } from "@/lib/api/expenses"
 import { toast } from "sonner"
@@ -86,8 +87,11 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
   const [uploadingDocs, setUploadingDocs] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [dragActive, setDragActive] = useState(false)
+  const [pendingDocFiles, setPendingDocFiles] = useState<File[]>([])
+  const [pendingReceipt, setPendingReceipt] = useState<File | null>(null)
   
   const { properties } = useProperties()
+  const { user } = useAuth()
 
   useEffect(() => {
     if (expense) {
@@ -108,6 +112,8 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
     } else {
       setFormData(initialExpense)
     }
+    setPendingDocFiles([])
+    setPendingReceipt(null)
   }, [expense])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -127,11 +133,6 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
   }
 
   const handleDocumentUpload = async (files: FileList | File[]) => {
-    if (!expense?.id) {
-      toast.error("Salve a despesa antes de adicionar documentos")
-      return
-    }
-
     const fileArray = Array.from(files)
     
     // Validar número de arquivos (máximo 5)
@@ -156,6 +157,13 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
       return
     }
 
+    // Se a despesa não foi salva ainda, armazenar para upload posterior
+    if (!expense?.id) {
+      setPendingDocFiles(prev => [...prev, ...fileArray])
+      toast.success(`${fileArray.length} documento(s) adicionado(s) para envio após salvar`)
+      return
+    }
+
     setUploadingDocs(true)
     setUploadProgress(0)
 
@@ -164,28 +172,27 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
         expense.id,
         fileArray,
         'comprovante',
+        user!.id,
+        formData.documents || [],
         (progress) => setUploadProgress(progress)
       )
 
-      // Atualizar lista de documentos
-      const newDocs = result.uploaded_files.map((file: any) => ({
-        id: file.filename,
-        name: file.original_filename,
-        type: 'comprovante' as const,
-        url: file.url,
-        file_type: file.type,
-        size: file.size,
-      }))
-
       setFormData(prev => ({
         ...prev,
-        documents: [...(prev.documents || []), ...newDocs]
+        documents: [...(prev.documents || []), ...result.uploaded_files.map(d => ({
+          id: d.id || crypto.randomUUID(),
+          name: d.name,
+          type: d.type as 'comprovante' | 'nota_fiscal' | 'recibo' | 'outros',
+          url: d.url,
+          file_type: d.file_type,
+          size: d.size,
+        }))]
       }))
 
       toast.success(`${fileArray.length} documento(s) enviado(s) com sucesso!`)
     } catch (error: any) {
       console.error("Erro ao fazer upload:", error)
-      toast.error(error.detail || "Erro ao enviar documentos")
+      toast.error(error?.message || "Erro ao enviar documentos")
     } finally {
       setUploadingDocs(false)
       setUploadProgress(0)
@@ -193,10 +200,17 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
   }
 
   const handleRemoveDocument = async (documentUrl: string) => {
-    if (!expense?.id) return
+    if (!expense?.id) {
+      // Remover localmente se não foi salvo
+      setFormData(prev => ({
+        ...prev,
+        documents: (prev.documents || []).filter(doc => doc.url !== documentUrl)
+      }))
+      return
+    }
 
     try {
-      await expensesService.deleteDocument(expense.id, documentUrl)
+      await expensesService.deleteDocument(expense.id, documentUrl, formData.documents || [])
       
       setFormData(prev => ({
         ...prev,
@@ -206,16 +220,11 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
       toast.success("Documento removido com sucesso!")
     } catch (error: any) {
       console.error("Erro ao remover documento:", error)
-      toast.error(error.detail || "Erro ao remover documento")
+      toast.error(error?.message || "Erro ao remover documento")
     }
   }
 
   const handleReceiptUpload = async (file: File) => {
-    if (!expense?.id) {
-      toast.error("Salve a despesa antes de adicionar comprovante")
-      return
-    }
-
     // Validar tipo de arquivo
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']
     if (!validTypes.includes(file.type)) {
@@ -230,6 +239,13 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
       return
     }
 
+    // Se a despesa não foi salva ainda, armazenar para upload posterior
+    if (!expense?.id) {
+      setPendingReceipt(file)
+      toast.success("Comprovante adicionado para envio após salvar")
+      return
+    }
+
     setUploadingDocs(true)
     setUploadProgress(0)
 
@@ -237,14 +253,15 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
       const result = await expensesService.uploadReceipt(
         expense.id,
         file,
+        user!.id,
         (progress) => setUploadProgress(progress)
       )
 
-      setFormData(prev => ({ ...prev, receipt: result.file_info.url }))
+      setFormData(prev => ({ ...prev, receipt: result.url }))
       toast.success("Comprovante enviado com sucesso!")
     } catch (error: any) {
       console.error("Erro ao fazer upload:", error)
-      toast.error(error.response?.data?.detail || "Erro ao enviar comprovante")
+      toast.error(error?.message || "Erro ao enviar comprovante")
     } finally {
       setUploadingDocs(false)
       setUploadProgress(0)
@@ -254,16 +271,19 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
   const handleRemoveReceipt = async () => {
     if (!expense?.id) {
       setFormData(prev => ({ ...prev, receipt: "" }))
+      setPendingReceipt(null)
       return
     }
 
     try {
-      await expensesService.deleteReceipt(expense.id)
+      if (formData.receipt) {
+        await expensesService.deleteReceipt(expense.id, formData.receipt)
+      }
       setFormData(prev => ({ ...prev, receipt: "" }))
       toast.success("Comprovante removido com sucesso")
     } catch (error: any) {
       console.error("Erro ao deletar comprovante:", error)
-      toast.error(error.response?.data?.detail || "Erro ao remover comprovante")
+      toast.error(error?.message || "Erro ao remover comprovante")
     }
   }
 

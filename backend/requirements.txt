@@ -29,6 +29,9 @@ python-dotenv==1.0.0
 pillow==10.1.0
 python-dateutil==2.8.2
 
+# Agendamento de tarefas
+apscheduler==3.10.4
+
 # Supabase Storage (para produção)
 # supabase==2.0.0 - já incluído acima na versão 2.8.0
 

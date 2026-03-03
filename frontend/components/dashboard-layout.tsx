@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Home, Building2, Users, CreditCard, Receipt, Bell, Menu, Settings, LogOut, User } from "lucide-react"
+import Image from "next/image"
 import { useAuth } from "@/lib/contexts/auth"
 
 const navigation = [
@@ -60,7 +61,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <SheetContent side="left" className="w-64 p-0 bg-white">
           <div className="flex h-full flex-col">
             <div className="flex h-16 items-center border-b px-6">
-              <Building2 className="h-8 w-8 text-blue-600" />
+              <Image src="/logo.svg" alt="Imobly" width={32} height={32} className="h-8 w-8" />
               <span className="ml-2 text-xl font-bold">Imobly</span>
             </div>
             <nav className="flex-1 space-y-1 px-3 py-4">
@@ -122,7 +123,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
         <div className="flex min-h-0 flex-1 flex-col border-r bg-white">
           <div className="flex h-16 items-center border-b px-6">
-            <Building2 className="h-8 w-8 text-blue-600" />
+            <Image src="/logo.svg" alt="Imobly" width={32} height={32} className="h-8 w-8" />
             <span className="ml-2 text-xl font-bold">Imobly</span>
           </div>
           <nav className="flex-1 space-y-1 px-3 py-4">

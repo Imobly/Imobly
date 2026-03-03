@@ -34,8 +34,6 @@ class Expense(Base):
     documents = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relacionamentos serão definidos quando todos os módulos estiverem prontos
     # property = relationship("Property", back_populates="expenses")

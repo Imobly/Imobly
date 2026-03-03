@@ -19,6 +19,7 @@ import { Upload, X, Loader2, FileText } from "lucide-react"
 import { apiClient } from "@/lib/api/client"
 import { phoneMask, cpfCnpjMask, cpfCnpjUnmask, currencyMask, currencyUnmask, percentageMask, percentageUnmask, integerMask } from "@/lib/utils/masks"
 import { tenantsService } from "@/lib/api/tenants"
+import { useAuth } from "@/lib/contexts/auth"
 import { toast } from "sonner"
 
 interface TenantFormData {
@@ -99,6 +100,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
   const [dragActive, setDragActive] = useState(false)
   const [selectedDocType, setSelectedDocType] = useState<'rg' | 'cpf' | 'cnh' | 'comprovante_residencia' | 'comprovante_renda' | 'contrato' | 'outros'>('rg')
   const [pendingDocFiles, setPendingDocFiles] = useState<{ files: File[], docType: string }[]>([])
+  const { user } = useAuth()
 
   // Carregar propriedades ao abrir o dialog
   useEffect(() => {
@@ -320,6 +322,8 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
               savedTenant.id,
               pending.files,
               pending.docType as any,
+              user!.id,
+              savedTenant.documents || [],
               (progress) => setUploadProgress(progress)
             )
             totalUploaded += pending.files.length
@@ -390,25 +394,26 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
         tenant.id,
         fileArray,
         selectedDocType,
+        user!.id,
+        formData.documents || [],
         (progress) => setUploadProgress(progress)
       )
 
-      // Recarregar documentos
-      const docsResult = await tenantsService.getDocuments(tenant.id)
+      // Atualizar documentos locais com os novos
       setFormData(prev => ({
         ...prev,
-        documents: docsResult.documents.map(d => ({
-          id: d.id,
+        documents: [...(prev.documents || []), ...result.uploaded_files.map(d => ({
+          id: d.id || crypto.randomUUID(),
           name: d.name,
           type: d.type as any,
-          url: d.url
-        }))
+          url: d.url || '',
+        }))]
       }))
 
       toast.success(`${result.uploaded_files.length} documento(s) enviado(s) com sucesso!`)
     } catch (error: any) {
       console.error("Erro ao fazer upload:", error)
-      toast.error(error.response?.data?.detail || "Erro ao enviar documentos")
+      toast.error(error?.message || "Erro ao enviar documentos")
     } finally {
       setUploadingDocs(false)
       setUploadProgress(0)
@@ -426,7 +431,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
     }
 
     try {
-      await tenantsService.deleteDocument(tenant.id, documentUrl)
+      await tenantsService.deleteDocument(tenant.id, documentUrl, formData.documents || [])
       setFormData(prev => ({
         ...prev,
         documents: prev.documents?.filter(d => d.url !== documentUrl)
@@ -434,7 +439,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
       toast.success("Documento removido com sucesso")
     } catch (error: any) {
       console.error("Erro ao deletar documento:", error)
-      toast.error(error.response?.data?.detail || "Erro ao remover documento")
+      toast.error(error?.message || "Erro ao remover documento")
     }
   }
 
@@ -481,7 +486,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
     const newDoc = {
       id: `doc-${Date.now()}`,
       name: "",
-      type: "identity" as const,
+      type: "outros" as const,
       url: "",
     }
     setFormData(prev => ({ 

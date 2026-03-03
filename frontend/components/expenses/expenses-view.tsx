@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Search, Grid3X3, List, TrendingUp, DollarSign, AlertTriangle, Edit, Trash2, RefreshCw, Receipt } from "lucide-react"
+import { Card } from "@/components/ui/card"
+import { Plus, Search, Grid3X3, List, AlertTriangle, Edit, Trash2, RefreshCw, Receipt } from "lucide-react"
 import { useExpenses } from "@/lib/hooks/useExpenses"
 import { useProperties } from "@/lib/hooks/useProperties"
 import { ExpenseDialog } from "@/components/expenses/expense-dialog"
@@ -120,20 +120,53 @@ export function ExpensesView() {
         </Button>
       </div>
 
-      {/* Status Card */}
-      <Card className="max-w-md">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Total gasto em despesas</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="h-4 w-4 rounded-full bg-red-500" />
-            <div className="text-3xl font-bold text-foreground">
-              {totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      {/* Status Cards */}
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600">Total</p>
+              <p className="text-lg font-bold">{statusCounts.total}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-green-600 rounded-full"></div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600">Pagas</p>
+              <p className="text-lg font-bold">{currencyFormat(paidAmount)}</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-yellow-600 rounded-full"></div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600">Pendentes</p>
+              <p className="text-lg font-bold">{currencyFormat(pendingAmount)}</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-red-600 rounded-full"></div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600">Total Gasto</p>
+              <p className="text-lg font-bold">{currencyFormat(totalAmount)}</p>
+            </div>
+          </div>
+        </Card>
+      </div>
 
       {/* Search and Filters */}
       <div className="flex items-center gap-4 flex-wrap">

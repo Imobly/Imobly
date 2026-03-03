@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Search, Grid3X3, List, Users, UserCheck, UserX, Edit, Trash2, RefreshCw, AlertTriangle } from "lucide-react"
+import { Card } from "@/components/ui/card"
+import { Plus, Search, Grid3X3, List, Users, Edit, Trash2, RefreshCw, AlertTriangle } from "lucide-react"
 import { useTenants } from "@/lib/hooks/useTenants"
 import { TenantDialog } from "@/components/tenants/tenant-dialog"
 import { TenantCard } from "@/components/tenants/tenant-card"
@@ -254,42 +254,39 @@ export function TenantsView() {
       </div>
 
       {/* Status Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Inquilinos</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statusCounts.total}</div>
-            <p className="text-xs text-muted-foreground">
-              Total registrado
-            </p>
-          </CardContent>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600">Total</p>
+              <p className="text-lg font-bold">{statusCounts.total}</p>
+            </div>
+          </div>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ativos</CardTitle>
-            <UserCheck className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statusCounts.active}</div>
-            <p className="text-xs text-muted-foreground">
-              Inquilinos ativos
-            </p>
-          </CardContent>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-green-600 rounded-full"></div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600">Ativos</p>
+              <p className="text-lg font-bold">{statusCounts.active}</p>
+            </div>
+          </div>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inativos</CardTitle>
-            <UserX className="h-4 w-4 text-gray-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statusCounts.inactive}</div>
-            <p className="text-xs text-muted-foreground">
-              Inquilinos inativos
-            </p>
-          </CardContent>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+              <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600">Inativos</p>
+              <p className="text-lg font-bold">{statusCounts.inactive}</p>
+            </div>
+          </div>
         </Card>
       </div>
 

@@ -9,6 +9,17 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 
+class ExpenseDocument(BaseModel):
+    """Documento anexado a uma despesa"""
+    id: str
+    name: str
+    type: str  # comprovante, nota_fiscal, recibo, outros
+    url: str
+    file_type: Optional[str] = None
+    size: Optional[int] = None
+    uploaded_at: Optional[str] = None
+
+
 class ExpenseBase(BaseModel):
     user_id: Optional[int] = None
     type: str = Field(..., min_length=1, max_length=20, description="Tipo da despesa")
@@ -22,7 +33,7 @@ class ExpenseBase(BaseModel):
     vendor: Optional[str] = Field(None, max_length=255)
     number: Optional[str] = Field(None, max_length=20)
     receipt: Optional[str] = None
-    documents: Optional[Dict[str, Any]] = None
+    documents: Optional[List[ExpenseDocument]] = None
 
 
 class ExpenseCreate(ExpenseBase):
@@ -45,7 +56,7 @@ class ExpenseUpdate(BaseModel):
     vendor: Optional[str] = Field(None, max_length=255)
     number: Optional[str] = Field(None, max_length=20)
     receipt: Optional[str] = None
-    documents: Optional[Dict[str, Any]] = None
+    documents: Optional[List[ExpenseDocument]] = None
     notes: Optional[str] = None
 
 

@@ -2,8 +2,8 @@
 Repository para o módulo de notificações
 """
 
-from datetime import date, timedelta
-from typing import List, Optional
+from datetime import date, datetime, timedelta
+from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,32 @@ class NotificationRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    # ── Antispam: verifica se já existe notificação recente ──
+    def has_recent_notification(
+        self,
+        user_id: int,
+        related_id: str,
+        notification_type: str,
+        days: int = 7,
+    ) -> bool:
+        """
+        Retorna True se já existe uma notificação para o mesmo
+        related_id + type criada nos últimos `days` dias.
+        """
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        return (
+            self.db.query(Notification)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.related_id == related_id,
+                Notification.type == notification_type,
+                Notification.created_at >= cutoff,
+            )
+            .first()
+            is not None
+        )
+
+    # ── Listagem paginada ──
     def get_by_user(
         self,
         user_id: int,
@@ -22,13 +48,25 @@ class NotificationRepository:
         limit: int = 100,
         read: Optional[bool] = None,
         type: Optional[str] = None,
-    ) -> List[Notification]:
+        only_unread: bool = False,
+    ) -> Tuple[List[Notification], int]:
+        """
+        Retorna (items, total_count) para paginação.
+        `only_unread=True` é atalho para `read=False`.
+        """
         q = self.db.query(Notification).filter(Notification.user_id == user_id)
-        if read is not None:
+
+        if only_unread:
+            q = q.filter(Notification.read_status == False)
+        elif read is not None:
             q = q.filter(Notification.read_status == read)
+
         if type:
             q = q.filter(Notification.type == type)
-        return q.order_by(Notification.created_at.desc()).offset(skip).limit(limit).all()
+
+        total = q.count()
+        items = q.order_by(Notification.created_at.desc()).offset(skip).limit(limit).all()
+        return items, total
 
     def get_by_id_and_user(self, notification_id: int, user_id: int) -> Optional[Notification]:
         return (
@@ -53,7 +91,11 @@ class NotificationRepository:
         )
 
     def create(self, data: NotificationCreateInternal) -> Notification:
-        obj = Notification(**data.model_dump())
+        payload = data.model_dump()
+        # 'metadata' é reservado no SQLAlchemy; remapeamos para o atributo do modelo
+        if "metadata" in payload:
+            payload["notification_metadata"] = payload.pop("metadata")
+        obj = Notification(**payload)
         self.db.add(obj)
         self.db.commit()
         self.db.refresh(obj)
@@ -66,7 +108,9 @@ class NotificationRepository:
         if not obj:
             return None
         for field, value in data.model_dump(exclude_unset=True).items():
-            setattr(obj, field, value)
+            # 'metadata' é reservado no SQLAlchemy; remapeamos para o atributo do modelo
+            attr = "notification_metadata" if field == "metadata" else field
+            setattr(obj, attr, value)
         self.db.commit()
         self.db.refresh(obj)
         return obj
@@ -104,7 +148,7 @@ class NotificationRepository:
             .filter(
                 Notification.user_id == user_id,
                 Notification.read_status == True,
-                Notification.date < cutoff,
+                Notification.created_at < cutoff,
             )
             .delete(synchronize_session=False)
         )

@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.config import settings
 from src.database import create_tables
+from src.scheduler import start_scheduler, shutdown_scheduler
 
 # Importar routers de todos os módulos
 from src.auth.router import router as auth_router
@@ -18,6 +20,18 @@ from src.expenses.router import router as expenses_router
 from src.dashboard.router import router as dashboard_router
 from src.notifications.router import router as notifications_router
 
+
+# ── Lifespan (startup + shutdown) ──
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    create_tables()
+    start_scheduler()
+    yield
+    # Shutdown
+    shutdown_scheduler()
+
+
 # Inicializar aplicação FastAPI
 app = FastAPI(
     title="Imobly - Gestão Imobiliária",
@@ -26,7 +40,8 @@ app = FastAPI(
     openapi_url="/api/v1/openapi.json",
     docs_url="/api/v1/docs",
     redoc_url="/api/v1/redoc",
-    redirect_slashes=False,  # Evita 307 Temporary Redirect por trailing slash
+    redirect_slashes=False,
+    lifespan=lifespan,
 )
 
 # Configuração CORS para comunicação com frontend
@@ -78,13 +93,6 @@ app.include_router(payments_router, prefix="/api/v1/payments", tags=["payments"]
 app.include_router(expenses_router, prefix="/api/v1/expenses", tags=["expenses"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Executar na inicialização da aplicação"""
-    # Criar tabelas no banco de dados
-    create_tables()
 
 
 @app.get("/")

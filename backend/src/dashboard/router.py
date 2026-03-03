@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.database import get_db
 from src.security import get_current_user_local_id
 from .repository import DashboardRepository
+from .schema import DashboardSummaryResponse
 
 router = APIRouter()
 
@@ -17,6 +18,21 @@ router = APIRouter()
 def get_dashboard_repository(db: Session = Depends(get_db)) -> DashboardRepository:
     """Dependency para obter repository do dashboard"""
     return DashboardRepository(db)
+
+
+@router.get("/summary", response_model=DashboardSummaryResponse)
+def get_dashboard_summary(
+    user_id: int = Depends(get_current_user_local_id),
+    repository: DashboardRepository = Depends(get_dashboard_repository),
+):
+    """
+    Endpoint consolidado do dashboard com:
+    - overview: contratos ativos/inativos + taxa de ocupação
+    - financeiro: receitas pagas, despesas pagas e saldo do mês atual
+    - alertas_contratos: contagem vencendo em 30/60/90 dias
+    - inadimplencia: inquilinos com pagamentos atrasados ou parciais
+    """
+    return repository.get_summary(user_id)
 
 
 @router.get("/stats")
