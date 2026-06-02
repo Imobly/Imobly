@@ -102,7 +102,7 @@ class PaymentRepository:
             .filter(
                 Payment.user_id == user_id,
                 Payment.due_date < today,
-                Payment.status.in_(["pending", "partial"])
+                Payment.status.in_(["pendente", "parcial"])
             )
             .all()
         )

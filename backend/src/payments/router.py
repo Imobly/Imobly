@@ -90,13 +90,13 @@ def calculate_payment(
     remaining = max(0.0, total_expected - paid)
 
     if paid >= total_expected and paid > 0:
-        calc_status = "paid"
+        calc_status = "pago"
     elif paid > 0:
-        calc_status = "partial"
+        calc_status = "parcial"
     elif days_overdue > 0:
-        calc_status = "overdue"
+        calc_status = "atrasado"
     else:
-        calc_status = "pending"
+        calc_status = "pendente"
 
     return {
         "base_amount": round(rent, 2),
@@ -142,13 +142,13 @@ def register_payment(
     total_expected = rent + fine_amount + interest_amount
 
     if paid >= total_expected and paid > 0:
-        pay_status = "paid"
+        pay_status = "pago"
     elif paid > 0:
-        pay_status = "partial"
+        pay_status = "parcial"
     elif days_overdue > 0:
-        pay_status = "overdue"
+        pay_status = "atrasado"
     else:
-        pay_status = "pending"
+        pay_status = "pendente"
 
     property_id = data.property_id or contract.property_id
     tenant_id = data.tenant_id or contract.tenant_id
@@ -168,33 +168,6 @@ def register_payment(
         description=data.description,
     )
     new_payment = repository.create(internal)
-
-    # ── Notificação automática de pagamento parcial ──
-    if pay_status == "partial":
-        from src.notifications.repository import NotificationRepository
-        from src.notifications.schema import NotificationCreateInternal as NotifCreate
-
-        NotificationRepository(db).create(NotifCreate(
-            user_id=user_id,
-            type="partial_payment",
-            title="Pagamento parcial registrado",
-            message=(
-                f"Pagamento #{new_payment.id} — pago R$ {paid:.2f} "
-                f"de R$ {total_expected:.2f}"
-            ),
-            date=date.today(),
-            priority="medium",
-            read_status=False,
-            action_required=True,
-            related_id=str(new_payment.id),
-            related_type="payment",
-            metadata={
-                "property_id": property_id,
-                "tenant_id": tenant_id,
-                "paid_amount": round(paid, 2),
-                "total_expected": round(total_expected, 2),
-            },
-        ))
 
     return new_payment
 
@@ -223,7 +196,7 @@ def bulk_confirm_payments(
     for pid in payment_ids:
         updated = repository.update(
             pid, user_id,
-            PaymentUpdate(payment_date=payment_date, status="paid")
+            PaymentUpdate(payment_date=payment_date, status="pago")
         )
         if updated:
             confirmed.append(updated)
@@ -308,7 +281,7 @@ def confirm_payment(
     """Marcar pagamento como pago"""
     updated = repository.update(
         payment_id, user_id,
-        PaymentUpdate(payment_date=date.today(), status="paid"),
+        PaymentUpdate(payment_date=date.today(), status="pago"),
     )
     if not updated:
         raise HTTPException(

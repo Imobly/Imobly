@@ -74,13 +74,25 @@ def create_contract(
     contract_data: ContractCreate,
     user_id: int = Depends(get_current_user_local_id),
     repo: ContractRepository = Depends(get_contract_repository),
+    db: Session = Depends(get_db),
 ):
     """Criar novo contrato"""
     internal = ContractCreateInternal(
         **contract_data.dict(),
         user_id=user_id,
     )
-    return repo.create(internal)
+    new_contract = repo.create(internal)
+
+    # Auto-atualizar status do imóvel para 'occupied'
+    if new_contract.status == "ativo":
+        from src.properties.models import Property
+        prop = db.query(Property).filter(Property.id == new_contract.property_id).first()
+        if prop:
+            prop.status = "occupied"
+            prop.tenant_id = new_contract.tenant_id
+            db.commit()
+
+    return new_contract
 
 
 # ------------------------------------------------------------------
@@ -120,13 +132,27 @@ def update_contract(
 @router.patch("/{contract_id}/status", response_model=ContractResponse)
 def update_contract_status(
     contract_id: int,
-    new_status: str = Query(..., pattern="^(active|expired|terminated)$"),
+    new_status: str = Query(..., pattern="^(ativo|inativo|expirado)$"),
     user_id: int = Depends(get_current_user_local_id),
     repo: ContractRepository = Depends(get_contract_repository),
+    db: Session = Depends(get_db),
 ):
     updated = repo.update_status(contract_id, user_id, new_status)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
+
+    # Auto-atualizar status do imóvel
+    from src.properties.models import Property
+    prop = db.query(Property).filter(Property.id == updated.property_id).first()
+    if prop:
+        if new_status == "ativo":
+            prop.status = "occupied"
+            prop.tenant_id = updated.tenant_id
+        elif new_status in ("inativo", "expirado"):
+            prop.status = "vacant"
+            prop.tenant_id = None
+        db.commit()
+
     return updated
 
 
@@ -155,8 +181,22 @@ def delete_contract(
     contract_id: int,
     user_id: int = Depends(get_current_user_local_id),
     repo: ContractRepository = Depends(get_contract_repository),
+    db: Session = Depends(get_db),
 ):
+    # Buscar contrato antes de deletar para liberar imóvel
+    from src.properties.models import Property
+    contract = repo.get_by_id_and_user(contract_id, user_id)
+    if not contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
+
+    # Liberar imóvel
+    prop = db.query(Property).filter(Property.id == contract.property_id).first()
+    if prop and contract.status == "ativo":
+        prop.status = "vacant"
+        prop.tenant_id = None
+
     deleted = repo.delete(contract_id, user_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
+    db.commit()
     return {"message": "Contrato deletado com sucesso"}

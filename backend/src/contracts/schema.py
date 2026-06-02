@@ -19,7 +19,8 @@ class ContractBase(BaseModel):
     deposit: Decimal = Field(default=Decimal("0"), ge=0)
     interest_rate: Decimal = Field(default=Decimal("0"), ge=0)
     fine_rate: Decimal = Field(default=Decimal("0"), ge=0)
-    status: str = Field("active", pattern="^(active|expired|terminated)$")
+    due_day: Optional[int] = Field(None, ge=1, le=31, description="Dia do vencimento (1-31)")
+    status: str = Field("ativo", pattern="^(ativo|inativo|expirado)$")
 
     @validator("end_date")
     def end_date_after_start_date(cls, v, values):
@@ -46,7 +47,8 @@ class ContractUpdate(BaseModel):
     deposit: Optional[Decimal] = Field(None, ge=0)
     interest_rate: Optional[Decimal] = Field(None, ge=0)
     fine_rate: Optional[Decimal] = Field(None, ge=0)
-    status: Optional[str] = Field(None, pattern="^(active|expired|terminated)$")
+    due_day: Optional[int] = Field(None, ge=1, le=31)
+    status: Optional[str] = Field(None, pattern="^(ativo|inativo|expirado)$")
 
 
 class ContractResponse(ContractBase):

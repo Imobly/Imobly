@@ -37,7 +37,7 @@ class InadimplenciaItem(BaseModel):
     property_name: str
     amount: float
     due_date: date
-    status: Literal["overdue", "partial"]
+    status: Literal["atrasado", "parcial"]
 
     model_config = ConfigDict(from_attributes=True)
 

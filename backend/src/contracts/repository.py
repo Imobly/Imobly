@@ -51,7 +51,7 @@ class ContractRepository:
     def get_active(self, user_id: int) -> List[Contract]:
         return (
             self.db.query(Contract)
-            .filter(Contract.user_id == user_id, Contract.status == "active")
+            .filter(Contract.user_id == user_id, Contract.status == "ativo")
             .all()
         )
 
@@ -69,7 +69,7 @@ class ContractRepository:
             self.db.query(Contract)
             .filter(
                 Contract.user_id == user_id,
-                Contract.status == "active",
+                Contract.status == "ativo",
                 Contract.end_date <= cutoff,
             )
             .all()
@@ -107,7 +107,7 @@ class ContractRepository:
         if not contract:
             return None
         contract.end_date = new_end_date
-        contract.status = "active"
+        contract.status = "ativo"
         if new_rent is not None:
             contract.rent = new_rent
         self.db.commit()

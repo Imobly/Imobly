@@ -23,7 +23,7 @@ class PaymentBase(BaseModel):
     amount: Decimal = Field(..., gt=0)
     fine_amount: Decimal = Field(0, ge=0)
     total_amount: Decimal = Field(..., gt=0)
-    status: str = Field(..., pattern="^(pending|paid|overdue|partial)$")
+    status: str = Field(..., pattern="^(pendente|pago|atrasado|parcial)$")
     payment_method: Optional[str] = Field(None, pattern=_PAYMENT_METHOD_PATTERN)
     description: Optional[str] = None
 
@@ -42,7 +42,7 @@ class PaymentUpdate(BaseModel):
     amount: Optional[Decimal] = Field(None, gt=0)
     fine_amount: Optional[Decimal] = Field(None, ge=0)
     total_amount: Optional[Decimal] = Field(None, gt=0)
-    status: Optional[str] = Field(None, pattern="^(pending|paid|overdue|partial)$")
+    status: Optional[str] = Field(None, pattern="^(pendente|pago|atrasado|parcial)$")
     payment_method: Optional[str] = Field(None, pattern=_PAYMENT_METHOD_PATTERN)
     description: Optional[str] = None
 

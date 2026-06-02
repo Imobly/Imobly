@@ -1,5 +1,8 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
+--
+-- CONTRACT STATUS: 'ativo', 'inativo', 'expirado'
+-- TENANT STATUS: derived from contract at query time (no status column)
 
 CREATE TABLE public.contracts (
   id integer NOT NULL DEFAULT nextval('contracts_id_seq'::regclass),
@@ -44,23 +47,22 @@ CREATE TABLE public.expenses (
   CONSTRAINT expenses_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id),
   CONSTRAINT expenses_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE TABLE public.notifications (
-  id character varying NOT NULL,
-  user_id integer NOT NULL,
-  type character varying NOT NULL,
-  title character varying NOT NULL,
-  message text NOT NULL,
-  date timestamp without time zone NOT NULL,
-  priority character varying NOT NULL,
-  read_status boolean,
-  action_required boolean,
-  related_id character varying,
-  related_type character varying,
-  created_at timestamp without time zone,
-  updated_at timestamp without time zone,
-  CONSTRAINT notifications_pkey PRIMARY KEY (id),
-  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
-);
+create table public.notifications (
+  id character varying(36) not null,
+  user_id integer not null,
+  type character varying(50) not null,
+  title character varying(255) not null,
+  message text not null,
+  is_read boolean null,
+  created_at timestamp without time zone null,
+  updated_at timestamp without time zone null,
+  link text null,
+  metadata jsonb null,
+  constraint notifications_pkey primary key (id),
+  constraint notifications_user_id_fkey foreign KEY (user_id) references users (id)
+) TABLESPACE pg_default;
+
+create index IF not exists ix_notifications_user_id on public.notifications using btree (user_id) TABLESPACE pg_default;
 CREATE TABLE public.payments (
   id integer NOT NULL DEFAULT nextval('payments_id_seq'::regclass),
   user_id integer NOT NULL,
@@ -120,7 +122,6 @@ CREATE TABLE public.tenants (
   emergency_contact json,
   documents json,
   contract_id integer,
-  status character varying,
   created_at timestamp without time zone,
   updated_at timestamp without time zone,
   CONSTRAINT tenants_pkey PRIMARY KEY (id),

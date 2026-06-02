@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-_TYPE_PATTERN = "^(contract_expiring|payment_overdue|partial_payment|maintenance_urgent|system_alert|reminder)$"
+_TYPE_PATTERN = "^(contract_expiring|payment_overdue|partial_payment|payment_registered|maintenance_urgent|system_alert|reminder|tenant_delinquent)$"
 _PRIORITY_PATTERN = "^(low|medium|high|urgent)$"
 _RELATED_TYPE_PATTERN = "^(contract|payment|maintenance|property)$"
 

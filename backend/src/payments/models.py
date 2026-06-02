@@ -37,7 +37,7 @@ class Payment(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     fine_amount = Column(Numeric(10, 2), default=0)
     total_amount = Column(Numeric(10, 2), nullable=False)
-    status = Column(String(20), default="pending", index=True)
+    status = Column(String(20), default="pendente", index=True)
     payment_method = Column(String(20), nullable=True)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

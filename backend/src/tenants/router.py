@@ -35,9 +35,9 @@ def get_tenants(
 
     if search:
         tenants = repository.search_tenants(user_id, search, skip, limit)
-    elif status == "active":
+    elif status == "ativo":
         tenants = repository.get_active_tenants(user_id)
-    elif status == "inactive":
+    elif status == "inativo":
         tenants = repository.get_inactive_tenants(user_id)
     else:
         tenants = repository.get_by_user(user_id, skip, limit)
@@ -70,9 +70,10 @@ def create_tenant(
         )
     
     # Criar schema interno com user_id
+    data_dict = tenant_data.dict(exclude={'user_id'})
     tenant_create_internal = TenantCreateInternal(
-        **tenant_data.dict(exclude={'user_id'}),
-        user_id=user_id
+        **data_dict,
+        user_id=user_id,
     )
     
     new_tenant = repository.create(tenant_create_internal)

@@ -33,6 +33,7 @@ class Contract(Base):
     deposit = Column(Numeric(10, 2), default=0)
     interest_rate = Column(Numeric(5, 2), default=0)   # % per month on late payment
     fine_rate = Column(Numeric(5, 2), default=0)        # % fine on late payment
-    status = Column(String(20), default="active")       # 'active', 'expired', 'terminated'
+    due_day = Column(Integer, nullable=True)              # dia do vencimento (1-31)
+    status = Column(String(20), default="ativo")        # 'ativo', 'inativo', 'expirado'
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

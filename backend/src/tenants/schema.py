@@ -34,7 +34,6 @@ class TenantBase(BaseModel):
     emergency_contact: Optional[EmergencyContact] = None
     documents: Optional[List[TenantDocument]] = []
     contract_id: Optional[int] = None
-    status: str = Field("active", pattern="^(active|inactive)$")
 
 
 class TenantCreate(TenantBase):
@@ -56,7 +55,6 @@ class TenantUpdate(BaseModel):
     emergency_contact: Optional[EmergencyContact] = None
     documents: Optional[List[TenantDocument]] = None
     contract_id: Optional[int] = None
-    status: Optional[str] = Field(None, pattern="^(active|inactive)$")
 
 
 class TenantRead(TenantBase):

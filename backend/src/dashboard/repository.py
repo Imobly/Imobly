@@ -47,20 +47,24 @@ class DashboardRepository:
         }
 
     def get_tenant_stats(self, user_id: int) -> Dict[str, Any]:
-        """Obter estatísticas de inquilinos — 1 query GROUP BY"""
-        rows = (
-            self.db.query(Tenant.status, func.count(Tenant.id).label("count"))
+        """Obter estatísticas de inquilinos — derivado do contrato"""
+        total = (
+            self.db.query(func.count(Tenant.id))
             .filter(Tenant.user_id == user_id)
-            .group_by(Tenant.status)
-            .all()
-        )
-        counts = {status: cnt for status, cnt in rows}
-        total = sum(counts.values())
+            .scalar()
+        ) or 0
+
+        active = (
+            self.db.query(func.count(Tenant.id))
+            .join(Contract, Tenant.contract_id == Contract.id)
+            .filter(Tenant.user_id == user_id, Contract.status == "ativo")
+            .scalar()
+        ) or 0
 
         return {
             "total": total,
-            "active": counts.get("active", 0),
-            "inactive": counts.get("inactive", 0)
+            "active": active,
+            "inactive": total - active
         }
 
     def get_financial_stats(self, user_id: int) -> Dict[str, Any]:
@@ -75,7 +79,7 @@ class DashboardRepository:
                     case(
                         (
                             and_(
-                                Payment.status == "paid",
+                                Payment.status == "pago",
                                 extract("month", Payment.payment_date) == current_month,
                                 extract("year", Payment.payment_date) == current_year,
                             ),
@@ -86,13 +90,13 @@ class DashboardRepository:
                 ).label("monthly_income"),
                 func.sum(
                     case(
-                        (Payment.status == "pending", Payment.total_amount),
+                        (Payment.status == "pendente", Payment.total_amount),
                         else_=0,
                     )
                 ).label("pending_payments"),
                 func.sum(
                     case(
-                        (Payment.status == "overdue", Payment.total_amount),
+                        (Payment.status == "atrasado", Payment.total_amount),
                         else_=0,
                     )
                 ).label("overdue_payments"),
@@ -146,7 +150,7 @@ class DashboardRepository:
             )
             .filter(
                 Payment.user_id == user_id,
-                Payment.status == "paid",
+                Payment.status == "pago",
                 Payment.payment_date >= start_date,
             )
             .group_by(
@@ -227,12 +231,12 @@ class DashboardRepository:
 
         active_contracts = (
             self.db.query(func.count(Contract.id))
-            .filter(Contract.user_id == user_id, Contract.status == "active")
+            .filter(Contract.user_id == user_id, Contract.status == "ativo")
             .scalar() or 0
         )
         inactive_contracts = (
             self.db.query(func.count(Contract.id))
-            .filter(Contract.user_id == user_id, Contract.status.in_(["expired", "terminated"]))
+            .filter(Contract.user_id == user_id, Contract.status.in_(["expirado", "inativo"]))
             .scalar() or 0
         )
 
@@ -250,7 +254,7 @@ class DashboardRepository:
             self.db.query(func.sum(Payment.total_amount))
             .filter(
                 Payment.user_id == user_id,
-                Payment.status == "paid",
+                Payment.status == "pago",
                 extract("month", Payment.payment_date) == current_month,
                 extract("year", Payment.payment_date) == current_year,
             )
@@ -294,7 +298,7 @@ class DashboardRepository:
             )
             .filter(
                 Contract.user_id == user_id,
-                Contract.status == "active",
+                Contract.status == "ativo",
                 Contract.end_date >= today,
                 Contract.end_date <= today + timedelta(days=90),
             )
@@ -322,7 +326,7 @@ class DashboardRepository:
             .join(Property, Payment.property_id == Property.id)
             .filter(
                 Payment.user_id == user_id,
-                Payment.status.in_(["overdue", "partial"]),
+                Payment.status.in_(["atrasado", "parcial"]),
             )
             .order_by(Payment.due_date.asc())
             .all()
@@ -340,7 +344,7 @@ class DashboardRepository:
                 "due_date": row.due_date,
                 "status": row.status,
             }
-            if row.status == "overdue":
+            if row.status == "atrasado":
                 atrasados.append(item)
             else:
                 parciais.append(item)

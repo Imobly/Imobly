@@ -27,7 +27,6 @@ class Tenant(Base):
         ForeignKey("contracts.id", name="fk_tenant_contract_id", use_alter=True),
         nullable=True,
     )  # Contrato ativo
-    status = Column(String(20), default="active")  # 'active', 'inactive'
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

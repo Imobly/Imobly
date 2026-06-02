@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .models import Tenant
 from .schema import TenantCreate, TenantUpdate, TenantCreateInternal
+from src.contracts.models import Contract
 
 
 class TenantRepository:
@@ -85,18 +86,24 @@ class TenantRepository:
         return True
 
     def get_active_tenants(self, user_id: int) -> List[Tenant]:
-        """Buscar inquilinos ativos"""
+        """Buscar inquilinos ativos (com contrato ativo)"""
         return (
             self.db.query(Tenant)
-            .filter(Tenant.user_id == user_id, Tenant.status == "active")
+            .join(Contract, Tenant.contract_id == Contract.id)
+            .filter(Tenant.user_id == user_id, Contract.status == "ativo")
             .all()
         )
 
     def get_inactive_tenants(self, user_id: int) -> List[Tenant]:
-        """Buscar inquilinos inativos"""
+        """Buscar inquilinos inativos (sem contrato ativo)"""
+        from sqlalchemy import or_
         return (
             self.db.query(Tenant)
-            .filter(Tenant.user_id == user_id, Tenant.status == "inactive")
+            .outerjoin(Contract, Tenant.contract_id == Contract.id)
+            .filter(
+                Tenant.user_id == user_id,
+                or_(Tenant.contract_id.is_(None), Contract.status != "ativo"),
+            )
             .all()
         )
 
@@ -126,9 +133,10 @@ class TenantRepository:
         return self.db.query(Tenant).filter(Tenant.user_id == user_id).count()
 
     def count_active_tenants(self, user_id: int) -> int:
-        """Contar inquilinos ativos"""
+        """Contar inquilinos ativos (com contrato ativo)"""
         return (
             self.db.query(Tenant)
-            .filter(Tenant.user_id == user_id, Tenant.status == "active")
+            .join(Contract, Tenant.contract_id == Contract.id)
+            .filter(Tenant.user_id == user_id, Contract.status == "ativo")
             .count()
         )
