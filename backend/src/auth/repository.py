@@ -183,10 +183,11 @@ class AuthRepository:
         except HTTPException:
             raise
         except Exception as e:
+            # Não vazar o detalhe interno ao cliente; apenas registrar no log.
             logger.error(f"Erro ao registrar usuário: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Erro ao registrar usuário: {str(e)}"
+                detail="Não foi possível registrar o usuário. Verifique os dados ou tente outro email."
             )
     
     async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
@@ -206,27 +207,70 @@ class AuthRepository:
             logger.error(f"Erro ao buscar usuário: {str(e)}")
             return None
     
-    async def update_password(self, access_token: str, new_password: str) -> bool:
+    def get_local_user_by_email(self, email: str) -> Optional[User]:
+        """Busca o registro local do usuário por email"""
+        if not self.db:
+            return None
+        return self.db.query(User).filter(User.email == email).first()
+
+    def update_local_user(self, email: str, full_name: Optional[str] = None, new_email: Optional[str] = None) -> Optional[User]:
         """
-        Atualiza senha do usuário
-        
-        Args:
-            access_token: Token de acesso do usuário
-            new_password: Nova senha
-            
+        Atualiza campos do usuário na tabela local (full_name / email).
+
         Returns:
-            bool: True se sucesso
+            User atualizado, ou None se não encontrado.
         """
+        if not self.db:
+            raise Exception("Database session não configurada no AuthRepository")
+
+        user = self.db.query(User).filter(User.email == email).first()
+        if not user:
+            return None
+
+        if full_name is not None:
+            user.full_name = full_name
+        if new_email is not None:
+            user.email = new_email
+
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    async def change_password(self, supabase_user_id: str, email: str, current_password: str, new_password: str) -> bool:
+        """
+        Altera a senha do usuário, validando a senha atual antes.
+
+        - Valida a senha atual reautenticando no Supabase.
+        - Aplica a nova senha via Admin API (cliente usa SERVICE_ROLE_KEY).
+
+        Raises:
+            HTTPException 400: se a senha atual estiver incorreta.
+        """
+        # 1. Validar senha atual
         try:
-            # Autentica com o token
-            self.supabase.auth.set_session(access_token, "")
-            
-            response = self.supabase.auth.update_user({
-                "password": new_password
+            auth_check = self.supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": current_password,
             })
-            
-            return response.user is not None
-            
+            if not auth_check.user:
+                raise ValueError("invalid current password")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Senha atual incorreta",
+            )
+
+        # 2. Aplicar nova senha (Admin API — não depende da sessão do usuário)
+        try:
+            self.supabase.auth.admin.update_user_by_id(
+                supabase_user_id, {"password": new_password}
+            )
+            return True
         except Exception as e:
             logger.error(f"Erro ao atualizar senha: {str(e)}")
-            return False
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Não foi possível alterar a senha. Tente novamente.",
+            )

@@ -48,9 +48,10 @@ async def login(
     if '@' not in email_or_username:
         email = auth_repo.get_email_by_username(email_or_username)
         if not email:
+            # Mensagem genérica para não permitir enumeração de usuários.
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Usuário não encontrado"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Email ou senha incorretos"
             )
     else:
         email = email_or_username
@@ -65,7 +66,7 @@ async def login(
     )
 
 
-@router.post("/register", response_model=UserResponse, summary="Registrar novo usuário")
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED, summary="Registrar novo usuário")
 async def register(
     user_data: RegisterRequest,
     auth_repo: AuthRepository = Depends(get_auth_repository)
@@ -92,18 +93,65 @@ async def register(
     )
 
 
-@router.get("/me", response_model=UserResponse, summary="Obter dados do usuário atual")
-async def get_current_user_profile(current_user: dict = Depends(get_current_user)):
-    """
-    Retorna informações do usuário autenticado atual
-    """
+def _user_response(current_user: dict, auth_repo: AuthRepository) -> UserResponse:
+    """Monta o UserResponse combinando o token com o registro local."""
+    email = current_user.get("email") or ""
+    local_user = auth_repo.get_local_user_by_email(email) if email else None
     return UserResponse(
-        id=current_user["id"],
-        email=current_user["email"],
-        username=current_user.get("username"),
-        full_name=current_user.get("full_name"),
-        created_at=current_user.get("created_at", ""),
-        updated_at=current_user.get("updated_at")
+        id=str(local_user.id) if local_user else current_user["id"],
+        email=local_user.email if local_user else email,
+        username=local_user.username if local_user else None,
+        full_name=local_user.full_name if local_user else None,
+        created_at=local_user.created_at.isoformat() if local_user and local_user.created_at else "",
+        updated_at=local_user.updated_at.isoformat() if local_user and local_user.updated_at else None,
+    )
+
+
+@router.get("/me", response_model=UserResponse, summary="Obter dados do usuário atual")
+async def get_current_user_profile(
+    current_user: dict = Depends(get_current_user),
+    auth_repo: AuthRepository = Depends(get_auth_repository),
+):
+    """
+    Retorna informações do usuário autenticado atual (a partir da tabela local).
+    """
+    return _user_response(current_user, auth_repo)
+
+
+@router.put("/me", response_model=UserResponse, summary="Atualizar dados do usuário atual")
+async def update_current_user_profile(
+    user_data: UpdateUserRequest,
+    current_user: dict = Depends(get_current_user),
+    auth_repo: AuthRepository = Depends(get_auth_repository),
+):
+    """
+    Atualiza nome completo / email do usuário na tabela local.
+    """
+    email = current_user.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email não encontrado no token",
+        )
+
+    updated = auth_repo.update_local_user(
+        email=email,
+        full_name=user_data.full_name,
+        new_email=user_data.email,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+
+    return UserResponse(
+        id=str(updated.id),
+        email=updated.email,
+        username=updated.username,
+        full_name=updated.full_name,
+        created_at=updated.created_at.isoformat() if updated.created_at else "",
+        updated_at=updated.updated_at.isoformat() if updated.updated_at else None,
     )
 
 
@@ -114,20 +162,15 @@ async def change_password(
     auth_repo: AuthRepository = Depends(get_auth_repository)
 ):
     """
-    Altera a senha do usuário autenticado
+    Altera a senha do usuário autenticado, validando a senha atual.
     """
-    # Note: Implementação simplificada - em produção, deve validar senha atual
-    success = await auth_repo.update_password(
-        access_token=current_user["access_token"],  # Precisa passar o token
-        new_password=password_data.new_password
+    await auth_repo.change_password(
+        supabase_user_id=current_user["id"],
+        email=current_user["email"],
+        current_password=password_data.current_password,
+        new_password=password_data.new_password,
     )
-    
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Erro ao alterar senha"
-        )
-    
+
     return {"message": "Senha alterada com sucesso"}
 
 

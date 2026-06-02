@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -18,12 +19,19 @@ from src.contracts.router import router as contracts_router
 from src.payments.router import router as payments_router
 from src.expenses.router import router as expenses_router
 from src.dashboard.router import router as dashboard_router
+from src.notifications.router import router as notifications_router
+
+logger = logging.getLogger("imobly.main")
+
+# Em produção, não expor a documentação interativa nem o schema OpenAPI
+_IS_PROD = settings.ENVIRONMENT in {"prod", "production"}
 
 
 # ── Lifespan (startup + shutdown) ──
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    settings.validate_runtime()
     create_tables()
     start_scheduler()
     yield
@@ -36,9 +44,9 @@ app = FastAPI(
     title="Imobly - Gestão Imobiliária",
     description="API para gestão completa de propriedades imobiliárias com Supabase Auth",
     version="2.0.0",
-    openapi_url="/api/v1/openapi.json",
-    docs_url="/api/v1/docs",
-    redoc_url="/api/v1/redoc",
+    openapi_url=None if _IS_PROD else "/api/v1/openapi.json",
+    docs_url=None if _IS_PROD else "/api/v1/docs",
+    redoc_url=None if _IS_PROD else "/api/v1/redoc",
     redirect_slashes=False,
     lifespan=lifespan,
 )
@@ -59,21 +67,23 @@ app.add_middleware(
 async def catch_exceptions_middleware(request: Request, call_next):
     try:
         return await call_next(request)
-    except Exception as exc:
-        # Log do erro (em produção, use logging adequado)
-        print(f"❌ Erro não tratado: {exc}")
-        import traceback
+    except Exception:
+        logger.exception("Erro não tratado ao processar %s %s", request.method, request.url.path)
 
-        traceback.print_exc()
+        # Só reflete a origem se ela estiver na allowlist — nunca ecoar
+        # uma origem arbitrária junto de Allow-Credentials.
+        origin = request.headers.get("origin")
+        cors_headers = {}
+        if origin and origin in settings.cors_origins_list:
+            cors_headers = {
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+            }
 
-        # Retornar erro 500 com CORS habilitado
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Erro interno do servidor"},
-            headers={
-                "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-                "Access-Control-Allow-Credentials": "true",
-            },
+            headers=cors_headers,
         )
 
 
@@ -91,6 +101,7 @@ app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["contract
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(expenses_router, prefix="/api/v1/expenses", tags=["expenses"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
+app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
 
 
 @app.get("/")

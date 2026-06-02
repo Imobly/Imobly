@@ -68,18 +68,27 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     ALLOWED_EXTENSIONS: set = {".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx"}
 
-    # Supabase Settings
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")  # Anon key
-    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", os.getenv("SECRET_KEY", ""))  # JWT secret para validação de tokens
-    
-    # JWT Settings (para compatibilidade)
-    SECRET_KEY: str = os.getenv("SECRET_KEY", os.getenv("SUPABASE_JWT_SECRET", ""))
+    # JWT Settings
+    # Fonte única do segredo de validação de JWT do Supabase.
+    # Aceita SUPABASE_JWT_SECRET (preferido) ou SECRET_KEY (alias retrocompatível).
+    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET") or os.getenv("SECRET_KEY", "")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
 
     class Config:
         env_file = ".env"
         case_sensitive = True
         extra = "ignore"  # Ignorar variáveis extras do Docker
+
+    def validate_runtime(self) -> None:
+        """
+        Validações de inicialização (fail-fast). Chamada no startup da app.
+        Fora de ambiente de desenvolvimento, o segredo JWT é obrigatório.
+        """
+        if self.ENVIRONMENT not in {"dev", "development"} and not self.SUPABASE_JWT_SECRET:
+            raise RuntimeError(
+                "SUPABASE_JWT_SECRET (ou SECRET_KEY) não configurado — "
+                "obrigatório fora de desenvolvimento para validar tokens."
+            )
 
 
 settings = Settings()

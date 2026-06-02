@@ -16,11 +16,13 @@ use_nullpool = os.getenv("DB_USE_NULLPOOL", "true").lower() == "true" or \
     ("supabase.com" in settings.DATABASE_URL and ":6543" in settings.DATABASE_URL)
 
 if use_nullpool:
-    # PgBouncer (transaction pooling) gerencia o pool; evite segurar conexões
+    # PgBouncer (transaction pooling) gerencia o pool; evite segurar conexões.
+    # Com NullPool cada request abre uma conexão nova — não há conexão ociosa
+    # para "envelhecer", então pool_pre_ping seria apenas um round-trip extra
+    # (SELECT 1) por request. Omitido de propósito para reduzir latência.
     engine = create_engine(
         settings.DATABASE_URL,
         poolclass=NullPool,
-        pool_pre_ping=True,
         echo=settings.DEBUG,
     )
 else:

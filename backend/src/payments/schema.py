@@ -4,7 +4,7 @@ Schemas para o módulo de pagamentos
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -63,6 +63,11 @@ class PaymentRegisterRequest(BaseModel):
     paid_amount: Decimal = Field(..., ge=0)
     payment_method: Optional[str] = Field(None, pattern=_PAYMENT_METHOD_PATTERN)
     description: Optional[str] = None
+
+
+class BulkConfirmRequest(BaseModel):
+    payment_ids: List[int] = Field(..., min_length=1)
+    payment_date: Optional[date] = None
 
 
 class PaymentRead(PaymentBase):

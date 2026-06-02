@@ -130,7 +130,7 @@ CREATE TABLE public.tenants (
 );
 CREATE TABLE public.users (
   id integer NOT NULL DEFAULT nextval('users_id_seq'::regclass),
-  email character varying NOT NULL,
+  email character varying NOT NULL UNIQUE,
   username character varying NOT NULL,
   full_name character varying,
   hashed_password character varying NOT NULL,

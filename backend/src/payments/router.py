@@ -18,6 +18,7 @@ from .schema import (
     PaymentCreateInternal,
     PaymentCalculateRequest,
     PaymentRegisterRequest,
+    BulkConfirmRequest,
 )
 
 router = APIRouter()
@@ -183,17 +184,15 @@ def get_overdue_payments(
 
 @router.post("/bulk-confirm/", response_model=List[PaymentResponse])
 def bulk_confirm_payments(
-    data: dict,
+    data: BulkConfirmRequest,
     user_id: int = Depends(get_current_user_local_id),
     repository: PaymentRepository = Depends(get_payment_repository),
 ):
     """Confirmar múltiplos pagamentos"""
-    payment_ids: List[int] = data.get("payment_ids", [])
-    payment_date_str: Optional[str] = data.get("payment_date")
-    payment_date = date.fromisoformat(payment_date_str) if payment_date_str else date.today()
+    payment_date = data.payment_date or date.today()
 
     confirmed = []
-    for pid in payment_ids:
+    for pid in data.payment_ids:
         updated = repository.update(
             pid, user_id,
             PaymentUpdate(payment_date=payment_date, status="pago")

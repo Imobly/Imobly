@@ -128,6 +128,12 @@ async def get_current_user_id(
     return current_user["id"]
 
 
+# Cache em processo do mapeamento UUID do Supabase -> id local (imutável após
+# criado). Evita repetir o SELECT FROM users em cada request — relevante quando
+# o frontend dispara várias chamadas em paralelo (ex.: dashboard).
+_local_id_cache: dict[str, int] = {}
+
+
 async def get_current_user_local_id(
     request: Request,
     current_user: dict = Depends(get_current_user),
@@ -135,12 +141,20 @@ async def get_current_user_local_id(
 ) -> int:
     """
     Dependency para obter o ID integer do usuário na tabela local.
-    O resultado é cacheado em request.state para evitar múltiplas
-    consultas SELECT FROM users na mesma requisição.
+    O resultado é cacheado em request.state (por requisição) e em um cache
+    de processo por UUID do Supabase (entre requisições).
     """
     # Retorna do cache se já resolvido nesta requisição
     if hasattr(request.state, "user_local_id"):
         return request.state.user_local_id
+
+    supabase_uid = current_user["id"]
+
+    # Cache entre requisições (mapeamento imutável UUID -> id local)
+    cached = _local_id_cache.get(supabase_uid)
+    if cached is not None:
+        request.state.user_local_id = cached
+        return cached
 
     from src.auth.models import User
 
@@ -172,7 +186,8 @@ async def get_current_user_local_id(
         db.refresh(user)
         logger.info(f"Usuário local criado automaticamente: {email} (id={user.id})")
 
-    # Armazena no estado da requisição para reutilização por outras dependencies
+    # Armazena no cache de processo e no estado da requisição para reutilização
+    _local_id_cache[supabase_uid] = user.id
     request.state.user_local_id = user.id
     return user.id
 
