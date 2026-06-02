@@ -6,14 +6,17 @@ import { DashboardLayout } from '../../components/dashboard-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { currencyFormat } from '@/lib/utils'
-import { usePropertiesStatus, useDashboard } from '@/lib/hooks/useDashboard'
+import { usePropertiesStatus } from '@/lib/hooks/useDashboard'
 import { usePayments } from '@/lib/hooks/usePayments'
 import { useExpenses } from '@/lib/hooks/useExpenses'
 import { useContracts } from '@/lib/hooks/useContracts'
 import { useTenants } from '@/lib/hooks/useTenants'
-import { PieChart as PieIcon, BarChart as BarIcon, Clock } from 'lucide-react'
+import { contractsService } from '@/lib/api/contracts'
+import { PieChart as PieIcon, BarChart as BarIcon, Clock, AlertTriangle, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   ResponsiveContainer,
   BarChart,
@@ -48,23 +51,25 @@ const TYPE_COLORS: Record<string, string> = {
   studio: '#8b5cf6',
 }
 
+// Palette for expense category donut chart
+const DONUT_COLORS = ['#2563eb', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+
 export default function DashboardPage() {
   // Data hooks
-  const { data: propertiesStatus, loading: propertiesLoading } = usePropertiesStatus()
-  const { summary } = useDashboard()
+  const { data: propertiesStatus } = usePropertiesStatus()
   const { payments } = usePayments()
   const { expenses } = useExpenses()
-  const { contracts } = useContracts()
-  const { tenants } = useTenants()
+  const { contracts, refetch: refetchContracts } = useContracts()
+  const { tenants, refetch: refetchTenants } = useTenants()
 
-  // ── Filter state ──
+  // ── Filter state (global) ──
   const now = new Date()
   const [filterYear, setFilterYear] = useState<string>(String(now.getFullYear()))
-  const [filterMonth, setFilterMonth] = useState<string>('all') // 'all' or '1'-'12'
+  const [filterMonth, setFilterMonth] = useState<string>('all')
   const [filterProperty, setFilterProperty] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
 
-  // Available years (from payments/expenses, or just current +-1)
+  // Available years (from payments/expenses, or just current)
   const availableYears = useMemo(() => {
     const years = new Set<number>()
     payments.forEach(p => { if (p.due_date) years.add(new Date(p.due_date).getFullYear()) })
@@ -92,9 +97,9 @@ export default function DashboardPage() {
   const finance = useMemo(() => {
     const year = parseInt(filterYear)
 
-    // Filter payments → revenue (paid only)
+    // Filter payments → revenue (paid + partial)
     const filteredPayments = payments.filter(p => {
-      if (p.status !== 'paid') return false
+      if (p.status !== 'pago' && p.status !== 'parcial') return false
       const pDate = p.payment_date ? new Date(p.payment_date) : (p.due_date ? new Date(p.due_date) : null)
       if (!pDate) return false
       if (pDate.getFullYear() !== year) return false
@@ -118,47 +123,40 @@ export default function DashboardPage() {
     const despesasTotal = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
     const resultado = receitaTotal - despesasTotal
 
-    // Build chart rows: group by month
-    const monthlyMap = new Map<number, { revenue: number; expenses: number }>()
-
-    // Determine which months to show
-    const monthsToShow: number[] = []
-    if (filterMonth !== 'all') {
-      monthsToShow.push(parseInt(filterMonth))
-    } else {
-      for (let m = 1; m <= 12; m++) monthsToShow.push(m)
-    }
-
-    monthsToShow.forEach(m => monthlyMap.set(m, { revenue: 0, expenses: 0 }))
-
-    filteredPayments.forEach(p => {
-      const pDate = p.payment_date ? new Date(p.payment_date) : new Date(p.due_date)
-      const m = pDate.getMonth() + 1
-      const entry = monthlyMap.get(m)
-      if (entry) entry.revenue += (p.total_amount || p.amount || 0)
-    })
-
-    filteredExpenses.forEach(e => {
-      const eDate = new Date(e.date)
-      const m = eDate.getMonth() + 1
-      const entry = monthlyMap.get(m)
-      if (entry) entry.expenses += (Number(e.amount) || 0)
-    })
-
-    const chartRows = monthsToShow.map(m => ({
-      name: MONTH_NAMES[m - 1],
-      receitas: monthlyMap.get(m)?.revenue ?? 0,
-      despesas: monthlyMap.get(m)?.expenses ?? 0,
-    }))
-
-    return { receitaTotal, despesasTotal, resultado, chartRows }
+    return { receitaTotal, despesasTotal, resultado, filteredPayments, filteredExpenses }
   }, [payments, expenses, filterYear, filterMonth, filterProperty, filterCategory])
 
-  // ── Occupancy metrics (fixed: also consider tenant_id) ──
+  // ── Despesas donut chart data (grouped by category) ──
+  const expensesByCategory = useMemo(() => {
+    const catMap = new Map<string, number>()
+    finance.filteredExpenses.forEach(e => {
+      const cat = e.category || 'Outros'
+      catMap.set(cat, (catMap.get(cat) || 0) + (Number(e.amount) || 0))
+    })
+    return Array.from(catMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [finance.filteredExpenses])
+
+  // ── Ganhos por Imóvel horizontal bar data ──
+  const revenueByProperty = useMemo(() => {
+    const propMap = new Map<number, number>()
+    finance.filteredPayments.forEach(p => {
+      propMap.set(p.property_id, (propMap.get(p.property_id) || 0) + (p.total_amount || p.amount || 0))
+    })
+    const props = propertiesStatus?.properties ?? []
+    return Array.from(propMap.entries())
+      .map(([propId, value]) => {
+        const prop = props.find(pr => (pr.id || pr.property_id) === propId)
+        return { name: prop?.property_name || prop?.name || `Imóvel #${propId}`, value }
+      })
+      .sort((a, b) => b.value - a.value)
+  }, [finance.filteredPayments, propertiesStatus])
+
+  // ── Occupancy metrics ──
   const occupancy = useMemo(() => {
     const props = propertiesStatus?.properties ?? []
     const total = props.length
-    // Property is occupied if status is 'occupied' OR tenant_id is set
     const occupied = props.filter(p => p.status === 'occupied' || p.tenant_id).length
     const vacant = props.filter(p => p.status === 'vacant' && !p.tenant_id).length
     const maintenance = props.filter(p => p.status === 'maintenance').length
@@ -188,26 +186,87 @@ export default function DashboardPage() {
       .sort((a, b) => b.value - a.value)
   }, [propertiesStatus])
 
-  // ── Contracts & tenants (untouched) ──
+  // ── Contracts & tenants ──
   const contractsTenants = useMemo(() => {
-    const activeContracts = contracts.filter(c => c.status === 'active')
-    const activeTenants = tenants.filter(t => t.status === 'active')
+    const activeContracts = contracts.filter(c => c.status === 'ativo')
     const nowDate = new Date()
     const in30 = new Date(); in30.setDate(nowDate.getDate() + 30)
-    const last30 = new Date(); last30.setDate(nowDate.getDate() - 30)
 
     const expiringSoon = contracts.filter(c => {
       const end = new Date(c.end_date)
-      return end >= nowDate && end <= in30 && c.status === 'active'
+      return end >= nowDate && end <= in30 && c.status === 'ativo'
     }).slice(0, 6)
 
-    const recentlyEnded = contracts.filter(c => {
-      const end = new Date(c.end_date)
-      return end < nowDate && end >= last30 && (c.status === 'expired' || c.status === 'terminated')
-    }).slice(0, 6)
+    return { activeContracts, expiringSoon }
+  }, [contracts])
 
-    return { activeContracts, activeTenants, expiringSoon, recentlyEnded }
-  }, [contracts, tenants])
+  // ── Delinquency data (overdue payments grouped by tenant, enriched with names) ──
+  const delinquency = useMemo(() => {
+    const overduePayments = payments.filter(p => p.status === 'atrasado')
+    const props = propertiesStatus?.properties ?? []
+    const byTenant = new Map<number, { tenant_id: number; tenant_name: string; property_name: string; count: number; total: number }>()
+    overduePayments.forEach(p => {
+      const existing = byTenant.get(p.tenant_id)
+      const tenant = tenants.find(t => t.id === p.tenant_id)
+      const tenantName = tenant?.name ?? `Inquilino #${p.tenant_id}`
+      const prop = props.find(pr => (pr.id || pr.property_id) === p.property_id)
+      const propertyName = prop?.property_name || prop?.name || `Imóvel #${p.property_id}`
+      if (existing) {
+        existing.count += 1
+        existing.total += (Number(p.total_amount) || Number(p.amount) || 0)
+      } else {
+        byTenant.set(p.tenant_id, {
+          tenant_id: p.tenant_id,
+          tenant_name: tenantName,
+          property_name: propertyName,
+          count: 1,
+          total: (Number(p.total_amount) || Number(p.amount) || 0),
+        })
+      }
+    })
+    const list = Array.from(byTenant.values()).sort((a, b) => b.total - a.total)
+    return { overdueCount: overduePayments.length, totalOverdue: overduePayments.reduce((s, p) => s + (Number(p.total_amount) || Number(p.amount) || 0), 0), list }
+  }, [payments, tenants, propertiesStatus])
+
+  // ── Partial payments (parcial) grouped by tenant ──
+  const partialPayments = useMemo(() => {
+    const partialPmts = payments.filter(p => p.status === 'parcial')
+    const props = propertiesStatus?.properties ?? []
+    const byTenant = new Map<number, { tenant_id: number; tenant_name: string; property_name: string; count: number; total: number }>()
+    partialPmts.forEach(p => {
+      const existing = byTenant.get(p.tenant_id)
+      const tenant = tenants.find(t => t.id === p.tenant_id)
+      const tenantName = tenant?.name ?? `Inquilino #${p.tenant_id}`
+      const prop = props.find(pr => (pr.id || pr.property_id) === p.property_id)
+      const propertyName = prop?.property_name || prop?.name || `Imóvel #${p.property_id}`
+      if (existing) {
+        existing.count += 1
+        existing.total += (Number(p.total_amount) || Number(p.amount) || 0)
+      } else {
+        byTenant.set(p.tenant_id, {
+          tenant_id: p.tenant_id,
+          tenant_name: tenantName,
+          property_name: propertyName,
+          count: 1,
+          total: (Number(p.total_amount) || Number(p.amount) || 0),
+        })
+      }
+    })
+    const list = Array.from(byTenant.values()).sort((a, b) => b.total - a.total)
+    return { partialCount: partialPmts.length, list }
+  }, [payments, tenants, propertiesStatus])
+
+  // ── Handle finalizar contrato ──
+  const handleFinalizarContrato = async (contractId: number) => {
+    try {
+      await contractsService.updateStatus(contractId, 'inativo')
+      toast.success('Contrato finalizado com sucesso')
+      await refetchContracts()
+      await refetchTenants()
+    } catch {
+      toast.error('Erro ao finalizar contrato')
+    }
+  }
 
   // ── Filter label for chart title ──
   const periodLabel = filterMonth === 'all'
@@ -226,6 +285,56 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── Filtros Globais ── */}
+        <div className="flex flex-wrap gap-3">
+          <Select value={filterYear} onValueChange={setFilterYear}>
+            <SelectTrigger className="w-[110px]">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map(y => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterMonth} onValueChange={setFilterMonth}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="Mês" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os meses</SelectItem>
+              {MONTH_NAMES.map((m, i) => (
+                <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterProperty} onValueChange={setFilterProperty}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Imóvel" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os imóveis</SelectItem>
+              {propertyList.map(p => (
+                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as categorias</SelectItem>
+              {expenseCategories.map(c => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* ═══════════════════════════════════════════════════════════ */}
         {/* BLOCO 1 — Visão Financeira                                 */}
         {/* ═══════════════════════════════════════════════════════════ */}
@@ -235,57 +344,7 @@ export default function DashboardPage() {
             <h2 className="text-xl font-semibold">Visão Financeira</h2>
           </div>
 
-          {/* Filtros */}
-          <div className="flex flex-wrap gap-3 mb-4">
-            <Select value={filterYear} onValueChange={setFilterYear}>
-              <SelectTrigger className="w-[110px]">
-                <SelectValue placeholder="Ano" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableYears.map(y => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={filterMonth} onValueChange={setFilterMonth}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Mês" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os meses</SelectItem>
-                {MONTH_NAMES.map((m, i) => (
-                  <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={filterProperty} onValueChange={setFilterProperty}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Imóvel" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os imóveis</SelectItem>
-                {propertyList.map(p => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as categorias</SelectItem>
-                {expenseCategories.map(c => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* KPI Cards — apenas 3 */}
+          {/* KPI Cards */}
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="pb-2">
@@ -315,28 +374,53 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Gráfico Receita x Despesas */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Receitas vs. Despesas — {periodLabel}</CardTitle>
-            </CardHeader>
-            <CardContent className="h-80">
-              {finance.chartRows.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-muted-foreground">Sem dados para o período selecionado</div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={finance.chartRows} barGap={4}>
-                    <XAxis dataKey="name" />
-                    <YAxis tickFormatter={(v: number) => `R$ ${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(value: number) => currencyFormat(value)} />
-                    <Legend />
-                    <Bar dataKey="receitas" name="Receitas" fill={BLUE} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="despesas" name="Despesas" fill={RED} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+          {/* Charts: Despesas donut + Ganhos por Imóvel */}
+          <div className="grid gap-6 md:grid-cols-2 mt-6">
+            {/* Despesas por Categoria — Donut */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Despesas por Categoria — {periodLabel}</CardTitle>
+              </CardHeader>
+              <CardContent className="h-80">
+                {expensesByCategory.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">Sem despesas para o período</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={expensesByCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={2} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                        {expensesByCategory.map((_, idx) => (
+                          <Cell key={`exp-${idx}`} fill={DONUT_COLORS[idx % DONUT_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => currencyFormat(value)} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Ganhos por Imóvel — Horizontal Bar */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Ganhos por Imóvel — {periodLabel}</CardTitle>
+              </CardHeader>
+              <CardContent className="h-80">
+                {revenueByProperty.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">Sem receitas para o período</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={revenueByProperty} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+                      <XAxis type="number" tickFormatter={(v: number) => `R$ ${(v / 1000).toFixed(0)}k`} />
+                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(value: number) => currencyFormat(value)} />
+                      <Bar dataKey="value" name="Receita" fill={BLUE} radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </section>
 
         <Separator />
@@ -351,33 +435,60 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Pie chart — Ocupação */}
+            {/* Distribuição por Categoria (tipo) — LEFT */}
+            <Card>
+              <CardHeader className="pb-0">
+                <CardTitle className="text-sm">Distribuição por Categoria</CardTitle>
+              </CardHeader>
+              <CardContent className="h-72 pt-2">
+                {typeDistribution.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Nenhum imóvel cadastrado</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={typeDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                        {typeDistribution.map((entry, idx) => (
+                          <Cell key={`type-${idx}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [`${value} imóvel(is)`, 'Quantidade']} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Pie chart — Ocupação — CENTER */}
             <Card>
               <CardHeader className="pb-0">
                 <CardTitle className="text-sm">Status de Ocupação</CardTitle>
               </CardHeader>
               <CardContent className="h-72 pt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={occupancy.pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                      {occupancy.pieData.map((entry, idx) => (
-                        <Cell key={`cell-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Legend />
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                {occupancy.total === 0 ? (
+                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Nenhum imóvel cadastrado</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={occupancy.pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} fill={BLUE} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                        {occupancy.pieData.map((_, idx) => (
+                          <Cell key={`cell-${idx}`} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Legend />
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
 
-            {/* Info cards — Taxa + Totais */}
+            {/* Info cards — Taxa + Totais — RIGHT */}
             <div className="grid gap-4 content-start">
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Taxa de Ocupação</CardTitle></CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold">{occupancy.rate}%</div>
-                  <div className="text-xs text-muted-foreground mt-1">{occupancy.occupied} de {occupancy.total} imóveis ocupados</div>
                 </CardContent>
               </Card>
               <Card>
@@ -404,28 +515,50 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             </div>
+          </div>
+        </section>
 
-            {/* Horizontal bar chart — Distribuição por categoria (tipo) */}
+        <Separator />
+
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {/* BLOCO 3 — Contratos                                        */}
+        {/* ═══════════════════════════════════════════════════════════ */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-xl font-semibold">Contratos</h2>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Contratos ativos — KPI */}
             <Card>
-              <CardHeader className="pb-0">
-                <CardTitle className="text-sm">Distribuição por Categoria</CardTitle>
-              </CardHeader>
-              <CardContent className="h-72 pt-2">
-                {typeDistribution.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Nenhum imóvel cadastrado</div>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Contratos ativos</CardTitle></CardHeader>
+              <CardContent><div className="text-2xl font-bold text-green-600">{contractsTenants.activeContracts.length}</div></CardContent>
+            </Card>
+
+            {/* Próximos a vencer — list */}
+            <Card>
+              <CardHeader><CardTitle>Próximos a vencer</CardTitle></CardHeader>
+              <CardContent>
+                {contractsTenants.expiringSoon.length === 0 ? (
+                  <p className="text-muted-foreground">Nenhum contrato próximo do vencimento.</p>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={typeDistribution} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-                      <XAxis type="number" allowDecimals={false} />
-                      <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={(value: number) => [`${value} imóvel(is)`, 'Quantidade']} />
-                      <Bar dataKey="value" name="Quantidade" radius={[0, 4, 4, 0]}>
-                        {typeDistribution.map((entry, idx) => (
-                          <Cell key={`type-${idx}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ul className="space-y-2">
+                    {contractsTenants.expiringSoon.map(c => {
+                      const prop = (propertiesStatus?.properties ?? []).find(pr => (pr.id || pr.property_id) === c.property_id)
+                      const propName = prop?.property_name || prop?.name || `Imóvel #${c.property_id}`
+                      const tenant = tenants.find(t => t.id === c.tenant_id)
+                      const tenantName = tenant?.name || `Inquilino #${c.tenant_id}`
+                      return (
+                        <li key={c.id} className="flex items-center justify-between text-sm gap-2">
+                          <span className="flex-1">{propName} • {tenantName}</span>
+                          <Badge variant="outline"><Clock className="h-3 w-3 mr-1"/> {new Date(c.end_date).toLocaleDateString()}</Badge>
+                          <Button size="sm" variant="destructive" className="ml-2 h-7 text-xs" onClick={() => handleFinalizarContrato(c.id)}>
+                            <XCircle className="h-3 w-3 mr-1" /> Finalizar
+                          </Button>
+                        </li>
+                      )
+                    })}
+                  </ul>
                 )}
               </CardContent>
             </Card>
@@ -435,44 +568,38 @@ export default function DashboardPage() {
         <Separator />
 
         {/* ═══════════════════════════════════════════════════════════ */}
-        {/* BLOCO 3 — Contratos & Inquilinos (inalterado)              */}
+        {/* BLOCO 4 — Pagamentos                                       */}
         {/* ═══════════════════════════════════════════════════════════ */}
         <section>
           <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-xl font-semibold">Contratos e Inquilinos</h2>
+            <AlertTriangle className="h-5 w-5 text-red-600" />
+            <h2 className="text-xl font-semibold">Pagamentos</h2>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Pagamentos em atraso */}
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Contratos ativos</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold text-green-600">{contractsTenants.activeContracts.length}</div></CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Inquilinos ativos</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold">{contractsTenants.activeTenants.length}</div></CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Vencem em 30 dias</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold text-yellow-600">{contractsTenants.expiringSoon.length}</div></CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Encerrados (30 dias)</CardTitle></CardHeader>
-              <CardContent><div className="text-2xl font-bold text-muted-foreground">{contractsTenants.recentlyEnded.length}</div></CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 mt-6">
-            <Card>
-              <CardHeader><CardTitle>Próximos a vencer</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Pagamentos em atraso</span>
+                  {delinquency.overdueCount > 0 && (
+                    <Badge variant="destructive">{delinquency.overdueCount}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
               <CardContent>
-                {contractsTenants.expiringSoon.length === 0 ? (
-                  <p className="text-muted-foreground">Nenhum contrato próximo do vencimento.</p>
+                {delinquency.list.length === 0 ? (
+                  <p className="text-muted-foreground">Nenhum pagamento em atraso.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {contractsTenants.expiringSoon.map(c => (
-                      <li key={c.id} className="flex items-center justify-between text-sm">
-                        <span>Contrato #{c.id} • Imóvel #{c.property_id} • Inquilino #{c.tenant_id}</span>
-                        <Badge variant="outline"><Clock className="h-3 w-3 mr-1"/> {new Date(c.end_date).toLocaleDateString()}</Badge>
+                    {delinquency.list.map(d => (
+                      <li key={d.tenant_id} className="flex items-center justify-between text-sm">
+                        <div className="flex-1">
+                          <span className="font-medium">{d.tenant_name}</span>
+                          <span className="text-muted-foreground ml-2">• {d.property_name}</span>
+                        </div>
+                        <Badge variant="outline" className="mr-2">{d.count} pgto(s)</Badge>
+                        <span className="font-semibold text-red-600">{currencyFormat(d.total)}</span>
                       </li>
                     ))}
                   </ul>
@@ -480,17 +607,29 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
+            {/* Pagamentos parciais */}
             <Card>
-              <CardHeader><CardTitle>Encerrados recentemente</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Pagamentos parciais</span>
+                  {partialPayments.partialCount > 0 && (
+                    <Badge variant="secondary">{partialPayments.partialCount}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
               <CardContent>
-                {contractsTenants.recentlyEnded.length === 0 ? (
-                  <p className="text-muted-foreground">Nenhum contrato encerrado nos últimos 30 dias.</p>
+                {partialPayments.list.length === 0 ? (
+                  <p className="text-muted-foreground">Nenhum pagamento parcial.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {contractsTenants.recentlyEnded.map(c => (
-                      <li key={c.id} className="flex items-center justify-between text-sm">
-                        <span>Contrato #{c.id} • Imóvel #{c.property_id} • Inquilino #{c.tenant_id}</span>
-                        <Badge variant="secondary">{new Date(c.end_date).toLocaleDateString()}</Badge>
+                    {partialPayments.list.map(d => (
+                      <li key={d.tenant_id} className="flex items-center justify-between text-sm">
+                        <div className="flex-1">
+                          <span className="font-medium">{d.tenant_name}</span>
+                          <span className="text-muted-foreground ml-2">• {d.property_name}</span>
+                        </div>
+                        <Badge variant="outline" className="mr-2">{d.count} pgto(s)</Badge>
+                        <span className="font-semibold text-amber-600">{currencyFormat(d.total)}</span>
                       </li>
                     ))}
                   </ul>

@@ -21,8 +21,8 @@ interface TenantCardProps {
 }
 
 const statusConfig = {
-  active: { label: "Ativo", className: "bg-green-100 text-green-800" },
-  inactive: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
+  ativo: { label: "Ativo", className: "bg-green-100 text-green-800" },
+  inativo: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
 }
 
 export function TenantCard({ tenant, onEdit, onDelete }: TenantCardProps) {
@@ -96,9 +96,9 @@ export function TenantCard({ tenant, onEdit, onDelete }: TenantCardProps) {
                 <h3 className="font-semibold text-lg leading-tight">{tenant.name}</h3>
                 <Badge 
                   variant="secondary" 
-                  className={`mt-1 ${statusConfig[tenant.status as keyof typeof statusConfig].className}`}
+                  className={`mt-1 ${(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).className}`}
                 >
-                  {statusConfig[tenant.status as keyof typeof statusConfig].label}
+                  {(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).label}
                 </Badge>
               </div>
             </div>

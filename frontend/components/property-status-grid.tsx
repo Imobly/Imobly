@@ -54,7 +54,7 @@ export function PropertyStatusGrid({ period = "6months" }: PropertyStatusGridPro
                 } catch (_) {}
               }
               const propertyId = property.id || property.property_id
-              const contracts = await contractsService.getContracts({ property_id: propertyId, status: 'active' })
+              const contracts = await contractsService.getContracts({ property_id: propertyId, status: 'ativo' })
               if (Array.isArray(contracts) && contracts.length > 0) {
                 const activeContract: any = contracts[0]
                 let tenantName = 'Inquilino não identificado'

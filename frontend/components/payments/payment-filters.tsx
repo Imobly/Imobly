@@ -24,10 +24,10 @@ export function PaymentFilters() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os status</SelectItem>
-                <SelectItem value="paid">Pago</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="partial">Parcial</SelectItem>
-                <SelectItem value="overdue">Atrasado</SelectItem>
+                <SelectItem value="pago">Pago</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="parcial">Parcial</SelectItem>
+                <SelectItem value="atrasado">Atrasado</SelectItem>
               </SelectContent>
             </Select>
           </div>

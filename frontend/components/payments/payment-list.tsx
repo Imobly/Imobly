@@ -15,10 +15,10 @@ interface PaymentListProps {
 }
 
 const statusConfig = {
-  paid: { label: "Pago", className: "bg-green-100 text-green-800" },
-  pending: { label: "Pendente", className: "bg-yellow-100 text-yellow-800" },
-  overdue: { label: "Atrasado", className: "bg-red-100 text-red-800" },
-  partial: { label: "Parcial", className: "bg-blue-100 text-blue-800" },
+  pago: { label: "Pago", className: "bg-green-100 text-green-800" },
+  pendente: { label: "Pendente", className: "bg-yellow-100 text-yellow-800" },
+  atrasado: { label: "Atrasado", className: "bg-red-100 text-red-800" },
+  parcial: { label: "Parcial", className: "bg-blue-100 text-blue-800" },
 }
 
 export function PaymentList({ payments, onEdit, onDelete }: PaymentListProps) {
@@ -99,7 +99,7 @@ export function PaymentList({ payments, onEdit, onDelete }: PaymentListProps) {
                 </TableCell>
                 <TableCell>
                   <div className="text-sm">{formatDateBRShort(payment.dueDate)}</div>
-                  {payment.status === "overdue" && (
+                  {payment.status === "atrasado" && (
                     <div className="text-xs text-red-600 flex items-center mt-1">
                       <AlertTriangle className="h-3 w-3 mr-1" />
                       {getDaysOverdue(payment.dueDate)} dias em atraso

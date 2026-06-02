@@ -16,10 +16,10 @@ interface PaymentCardProps {
 }
 
 const statusConfig = {
-  paid: { label: "Pago", className: "bg-green-100 text-green-800" },
-  pending: { label: "Pendente", className: "bg-yellow-100 text-yellow-800" },
-  partial: { label: "Parcial", className: "bg-orange-100 text-orange-800" },
-  overdue: { label: "Atrasado", className: "bg-red-100 text-red-800" },
+  pago: { label: "Pago", className: "bg-green-100 text-green-800" },
+  pendente: { label: "Pendente", className: "bg-yellow-100 text-yellow-800" },
+  parcial: { label: "Parcial", className: "bg-orange-100 text-orange-800" },
+  atrasado: { label: "Atrasado", className: "bg-red-100 text-red-800" },
 }
 
 const paymentMethodConfig = {
@@ -46,7 +46,7 @@ export function PaymentCard({ payment, onEdit }: PaymentCardProps) {
   }, [payment.tenant, payment.tenant_id, tenants])
 
   const getDaysOverdue = () => {
-    if (payment.status !== "overdue") return 0
+    if (payment.status !== "atrasado") return 0
     const today = new Date()
     const dueDate = new Date(payment.dueDate)
     const diffTime = today.getTime() - dueDate.getTime()
@@ -65,7 +65,7 @@ export function PaymentCard({ payment, onEdit }: PaymentCardProps) {
               >
                 {statusConfig[payment.status as keyof typeof statusConfig].label}
               </Badge>
-              {payment.status === "overdue" && (
+              {payment.status === "atrasado" && (
                 <Badge variant="secondary" className="bg-red-100 text-red-800 flex items-center">
                   <AlertTriangle className="mr-1 h-3 w-3" />
                   {getDaysOverdue()} dias

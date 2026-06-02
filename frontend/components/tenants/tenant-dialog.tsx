@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import {
   Dialog,
   DialogContent,
@@ -50,9 +50,9 @@ interface TenantFormData {
     deposit: string
     interest_rate: string
     fine_rate: string
-    status: 'active' | 'expired' | 'terminated'
+    due_day: string
+    status: 'ativo' | 'inativo' | 'expirado'
   }
-  status: 'active' | 'inactive'
 }
 
 interface TenantDialogProps {
@@ -85,9 +85,9 @@ const initialTenant: TenantFormData = {
     deposit: "",
     interest_rate: "",
     fine_rate: "",
-    status: "active",
+    due_day: "",
+    status: "ativo",
   },
-  status: "active",
 }
 
 export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialogProps) {
@@ -101,6 +101,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
   const [selectedDocType, setSelectedDocType] = useState<'rg' | 'cpf' | 'cnh' | 'comprovante_residencia' | 'comprovante_renda' | 'contrato' | 'outros'>('rg')
   const [pendingDocFiles, setPendingDocFiles] = useState<{ files: File[], docType: string }[]>([])
   const { user } = useAuth()
+  const isEditLoadRef = useRef(false)
 
   // Carregar propriedades ao abrir o dialog
   useEffect(() => {
@@ -112,6 +113,12 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
 
   // Preencher automaticamente o valor do aluguel quando uma propriedade for selecionada
   useEffect(() => {
+    // Ignorar durante carregamento de dados de edição
+    if (isEditLoadRef.current) {
+      isEditLoadRef.current = false
+      return
+    }
+
     const propertyId = formData.contract?.property_id
     if (propertyId && properties.length > 0) {
       const selectedProperty = properties.find(p => p.id === propertyId)
@@ -149,6 +156,8 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
 
   useEffect(() => {
     if (tenant) {
+      // Marcar que estamos carregando dados de edição (previne auto-fill de aluguel)
+      isEditLoadRef.current = true
       // Função para carregar contrato se contract_id existir
       const loadContractData = async () => {
         if (tenant.contract_id) {
@@ -177,9 +186,9 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
                 deposit: contract.deposit?.toString() || "",
                 interest_rate: contract.interest_rate?.toString() || "",
                 fine_rate: contract.fine_rate?.toString() || "",
-                status: contract.status || "active",
+                due_day: contract.due_day?.toString() || "",
+                status: contract.status || "ativo",
               },
-              status: tenant.status || "active",
             })
           } catch (error) {
             console.error("Erro ao carregar contrato:", error)
@@ -199,7 +208,6 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
               documents: tenant.documents || [],
               contract_id: tenant.contract_id,
               contract: initialTenant.contract,
-              status: tenant.status || "active",
             })
           }
         } else {
@@ -219,7 +227,6 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
             documents: tenant.documents || [],
             contract_id: undefined,
             contract: initialTenant.contract,
-            status: tenant.status || "active",
           })
         }
       }
@@ -605,19 +612,6 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select value={formData.status} onValueChange={(value) => handleInputChange("status", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Ativo</SelectItem>
-                      <SelectItem value="inactive">Inativo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Emergency Contact Section */}
                 <div className="pt-6 mt-6 border-t">
                   <h3 className="text-lg font-semibold mb-4">Contato de Emergência</h3>
@@ -798,18 +792,36 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
                     </div>
 
                     <div className="space-y-2">
+                      <Label htmlFor="contract_due_day">Dia do Vencimento</Label>
+                      <Input
+                        id="contract_due_day"
+                        type="text"
+                        inputMode="numeric"
+                        value={formData.contract?.due_day || ""}
+                        onChange={(e) => {
+                          const value = integerMask(e.target.value)
+                          const num = parseInt(value, 10)
+                          if (value === "" || (num >= 1 && num <= 31)) {
+                            handleNestedChange("contract", "due_day", value)
+                          }
+                        }}
+                        placeholder="Ex: 10"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
                       <Label htmlFor="contract_status">Status do Contrato</Label>
                       <Select
-                        value={formData.contract?.status || "active"}
+                        value={formData.contract?.status || "ativo"}
                         onValueChange={(value) => handleNestedChange("contract", "status", value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="active">Ativo</SelectItem>
-                          <SelectItem value="expired">Expirado</SelectItem>
-                          <SelectItem value="terminated">Rescindido</SelectItem>
+                          <SelectItem value="ativo">Ativo</SelectItem>
+                          <SelectItem value="inativo">Inativo</SelectItem>
+                          <SelectItem value="expirado">Expirado</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

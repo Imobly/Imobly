@@ -278,7 +278,7 @@ export function PaymentDialog({ open, onOpenChange, payment, onSave }: PaymentDi
         // Definir status conforme valores
         if (paidAmount) {
           const expected = calculation?.total_expected ?? paidAmount
-          updateBody.status = paidAmount >= expected ? 'paid' : 'partial'
+          updateBody.status = paidAmount >= expected ? 'pago' : 'parcial'
         }
         await paymentsService.updatePayment(payment.id, updateBody)
         toast.success('Pagamento atualizado com sucesso!')
@@ -356,7 +356,7 @@ export function PaymentDialog({ open, onOpenChange, payment, onSave }: PaymentDi
                 <SelectValue placeholder="Selecione um contrato" />
               </SelectTrigger>
               <SelectContent>
-                {contracts.filter(c => c.status === 'active').map((contract) => (
+                {contracts.filter(c => c.status === 'ativo').map((contract) => (
                   <SelectItem key={contract.id} value={contract.id.toString()}>
                     {contract.title} - R$ {parseFloat(contract.rent.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </SelectItem>

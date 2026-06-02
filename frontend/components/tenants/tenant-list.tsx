@@ -31,8 +31,8 @@ interface TenantListProps {
 }
 
 const statusConfig = {
-  active: { label: "Ativo", className: "bg-green-100 text-green-800" },
-  inactive: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
+  ativo: { label: "Ativo", className: "bg-green-100 text-green-800" },
+  inativo: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
 }
 
 export function TenantList({ tenants, onEdit, onDelete }: TenantListProps) {
@@ -104,9 +104,9 @@ export function TenantList({ tenants, onEdit, onDelete }: TenantListProps) {
               <TableCell>
                 <Badge
                   variant="secondary"
-                  className={statusConfig[tenant.status as keyof typeof statusConfig].className}
+                  className={(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).className}
                 >
-                  {statusConfig[tenant.status as keyof typeof statusConfig].label}
+                  {(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).label}
                 </Badge>
               </TableCell>
               <TableCell>

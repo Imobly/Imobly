@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Home, Building2, Users, CreditCard, Receipt, Bell, Menu, Settings, LogOut, User } from "lucide-react"
+import { Home, Building2, Users, CreditCard, Receipt, Menu, Settings, LogOut, User } from "lucide-react"
 import Image from "next/image"
 import { useAuth } from "@/lib/contexts/auth"
 
@@ -20,7 +20,6 @@ const navigation = [
   { name: "Inquilinos", href: "/tenants", icon: Users },
   { name: "Pagamentos", href: "/payments", icon: CreditCard },
   { name: "Despesas", href: "/expenses", icon: Receipt },
-  { name: "Notificações", href: "/notifications", icon: Bell },
   { name: "Configurações", href: "/settings", icon: Settings },
 ]
 

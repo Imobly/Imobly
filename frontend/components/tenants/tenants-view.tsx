@@ -60,8 +60,8 @@ export function TenantsView() {
 
   const statusCounts = {
     total: tenants.length,
-    active: tenants.filter((t) => t.status === "active").length,
-    inactive: tenants.filter((t) => t.status === "inactive").length,
+    active: tenants.filter((t) => t.status === "ativo").length,
+    inactive: tenants.filter((t) => t.status === "inativo").length,
   }
 
   const handleAdd = () => {
@@ -123,7 +123,8 @@ export function TenantsView() {
               deposit: parseFloat(contract.deposit.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
               interest_rate: parseFloat((contract.interest_rate || '').replace(',', '.')) || 0,
               fine_rate: parseFloat((contract.fine_rate || '').replace(',', '.')) || 0,
-              status: contract.status || 'active',
+              due_day: contract.due_day ? parseInt(contract.due_day, 10) : undefined,
+              status: contract.status || 'ativo',
             }
             
             if (selectedTenant.contract_id) {
@@ -179,7 +180,8 @@ export function TenantsView() {
               deposit: parseFloat(contract.deposit.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
               interest_rate: parseFloat((contract.interest_rate || '').replace(',', '.')) || 0,
               fine_rate: parseFloat((contract.fine_rate || '').replace(',', '.')) || 0,
-              status: contract.status || 'active',
+              due_day: contract.due_day ? parseInt(contract.due_day, 10) : undefined,
+              status: contract.status || 'ativo',
             }
             
             savedContract = await ApiService.contracts.createContract(contractData)
