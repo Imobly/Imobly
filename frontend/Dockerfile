@@ -3,8 +3,18 @@
 # Optimized for Render deployment
 # ==========================================
 
-# Use Node.js 18 Alpine (smaller image)
-FROM node:18-alpine AS base
+# Node 20 (LTS ativo). Node 18 chegou ao fim do suporte em abril/2025 e não
+# recebe mais patches de segurança.
+FROM node:20-alpine AS base
+
+# Habilita o Corepack e fixa a versão exata do pnpm (mesma do campo
+# "packageManager" em package.json). Antes o Dockerfile fazia
+# `npm install -g pnpm@latest`: a tag "latest" é flutuante, e quando o pnpm
+# lançou a v11 exigindo Node >=22.13, todo build sem cache (`--no-cache`, ou
+# CI sem cache de camadas) parou de funcionar nesta imagem — mesmo sem nenhuma
+# mudança no código do projeto. A versão é passada explicitamente aqui porque
+# neste estágio o package.json ainda não foi copiado para o container.
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # ==========================================
 # Stage 1: Dependencies
@@ -14,17 +24,13 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json pnpm-lock.yaml ./
-RUN npm install -g pnpm@latest && \
-    pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # ==========================================
 # Stage: Development (for docker-compose)
 # ==========================================
 FROM base AS development
 WORKDIR /app
-
-# Install pnpm
-RUN npm install -g pnpm@latest
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
@@ -66,7 +72,7 @@ ENV NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
 ENV NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION}
 
 # Build application (creates .next folder)
-RUN npm install -g pnpm@latest && pnpm build
+RUN pnpm build
 
 # ==========================================
 # Stage 3: Runner (Production)

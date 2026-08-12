@@ -6,8 +6,10 @@ Sistema moderno de gestão imobiliária desenvolvido com Next.js 14, TypeScript 
 
 - **Frontend**: https://imobly.onrender.com
 - **Backend API**: https://backend-non0.onrender.com
-- **Auth API**: https://auth-api-3zxk.onrender.com
 - **Documentação**: https://imobly.github.io/Documentation/
+
+> Não há um serviço de Auth API separado. A autenticação é feita pelo
+> Supabase Auth; o backend único (FastAPI) valida o JWT do Supabase.
 
 ## 🚀 Tecnologias
 
@@ -23,16 +25,11 @@ Sistema moderno de gestão imobiliária desenvolvido com Next.js 14, TypeScript 
 
 ### Pré-requisitos
 
-- Node.js 18+
-- pnpm (recomendado) ou npm
-
-### Instalação
-Para rodar este projeto localmente, você precisa:
-
-- Node.js 18+
-- pnpm (recomendado) ou npm
-- Backend rodando em `localhost:8000` (FastAPI)
-- Auth API rodando em `localhost:8001`
+- Node.js 20+ (o projeto fixa `pnpm@9.15.9` via `packageManager` em
+  `package.json` — use `corepack enable` para que essa versão seja
+  resolvida automaticamente)
+- Backend rodando em `localhost:8000` (FastAPI) — veja
+  [`../backend/README.md`](../backend/README.md)
 
 ### Instalação
 
@@ -58,12 +55,11 @@ cp .env.example .env.local
 O arquivo `.env.local` deve conter (apenas variáveis públicas, sem segredos). Use APIs locais por padrão; se preferir dados reais, substitua por URLs de produção:
 
 ```env
-# APIs locais (recomendado em DEV)
+# API local (recomendado em DEV)
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-NEXT_PUBLIC_AUTH_API_URL=http://localhost:8001/api/v1/auth
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# Opcional: Supabase público
+# Supabase público (necessário — auth e storage passam por aqui)
 NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=public-anon-key
 
@@ -71,23 +67,20 @@ NEXT_PUBLIC_APP_NAME=Imobly
 NEXT_PUBLIC_APP_VERSION=1.0.0
 NODE_ENV=development
 
-# Alternativa: usar APIs de produção para desenvolvimento com dados reais
+# Alternativa: usar a API de produção para desenvolvimento com dados reais
 # NEXT_PUBLIC_API_URL=https://backend-non0.onrender.com/api/v1
-# NEXT_PUBLIC_AUTH_API_URL=https://auth-api-3zxk.onrender.com/api/v1/auth
 ```
 
-### 4. Inicie os serviços backend
+### 4. Inicie o backend
 
-**Importante**: O frontend depende dos serviços backend para funcionar.
+**Importante**: o frontend depende do backend para funcionar. Não há um
+serviço de Auth API separado — a autenticação passa pelo Supabase, validado
+pelo próprio backend.
 
 ```bash
 # Em um terminal separado, inicie o Backend (porta 8000)
 cd ../backend
 # Siga as instruções do README do backend
-
-# Em outro terminal, inicie a Auth API (porta 8001)
-cd ../auth-api
-# Siga as instruções do README da auth-api
 ```
 
 ### 5. Execute o servidor de desenvolvimento
@@ -133,8 +126,47 @@ Frontend/
 
 ## 🐛 Troubleshooting
 
-- Erro "Failed to fetch" no login: garanta Backend em `localhost:8000` e Auth API em `localhost:8001`; confirme URLs em `.env.local`.
+- Erro "Failed to fetch" no login: garanta que o Backend está de pé em
+  `localhost:8000` e confirme `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_SUPABASE_URL`
+  em `.env.local`.
 - Porta 3000 em uso (Windows): `netstat -ano | findstr :3000` e finalize o processo se necessário.
+- `pnpm install` falhando com "This version of pnpm requires at least Node.js
+  vXX" — sua versão de Node é anterior à exigida pela versão de `pnpm`
+  instalada. Rode `corepack enable` na raiz do projeto: o Corepack lê o campo
+  `packageManager` de `package.json` e resolve a versão de pnpm correta (fixada
+  em `9.15.9`) automaticamente, sem depender de `pnpm@latest`.
+- Ao rodar via Docker: se um build **sem cache** (`docker compose build
+  --no-cache`) falhar num passo de instalação que sempre funcionou antes, é
+  quase sempre uma tag flutuante (`@latest`) resolvendo para uma versão nova
+  incompatível — não uma mudança no código do projeto. Prefira `docker compose
+  build --no-cache` periodicamente para pegar esse tipo de quebra antes que
+  ela apareça só em CI ou num ambiente novo.
+
+### Docker no Windows: `ENOMEM` e compilação lenta
+
+Rodando via Docker Desktop no Windows, os logs do frontend mostram
+`Error: ENOMEM: not enough memory, scandir '/app/app'` e o primeiro acesso a
+cada rota leva 30–60s.
+
+**Isso não é falta de memória** — o container não tem limite definido e usa
+~1 GB de 7,4 GB disponíveis; o diretório em questão tem poucas dezenas de
+arquivos. É uma limitação conhecida da camada de compartilhamento de arquivos
+do Docker Desktop no Windows (WSL2/FUSE), que devolve `ENOMEM` em `readdir`
+sobre bind mount. O Next.js registra o erro e segue: **as páginas compilam e
+respondem 200 normalmente**, apenas devagar no primeiro acesso.
+
+Se a lentidão incomodar, em ordem de eficácia:
+
+1. Mover o repositório para dentro do sistema de arquivos do WSL2
+   (`\\wsl$\Ubuntu\home\<user>\...`) e rodar o Docker de lá — elimina a
+   travessia Windows↔Linux e é de longe o maior ganho.
+2. Rodar o frontend direto no host (`pnpm dev`), deixando só o backend no
+   Docker.
+3. Conviver: depois do primeiro compile, cada rota responde rápido.
+
+O `docker-compose.yml` já define `WATCHPACK_POLLING`/`CHOKIDAR_USEPOLLING`,
+necessários porque bind mounts do Windows não propagam eventos inotify — sem
+isso o hot reload não dispara.
 ## 📄 Licença
 
 Este projeto é propriedade da **Imobly**.

@@ -22,7 +22,8 @@ Imobly/
 - Docker & Docker Compose
 - Conta no Supabase (obrigatório)
 - Python 3.11+ (opcional, para dev local)
-- Node.js 18+ & pnpm (opcional, para dev local)
+- Node.js 20+ & pnpm (opcional, para dev local — o projeto fixa
+  `pnpm@9.15.9` via `packageManager` em `frontend/package.json`)
 
 ### 1. Configurar Variáveis de Ambiente
 
@@ -76,7 +77,11 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+
+# O schema é criado/atualizado pelo Alembic, não pela aplicação:
+alembic upgrade head
+
+uvicorn src.main:app --reload --port 8000
 ```
 
 #### Frontend

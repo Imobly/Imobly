@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Sistema de Gestão Imobiliária - Frontend",
   "private": true,
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "build": "next build",
     "dev": "next dev",

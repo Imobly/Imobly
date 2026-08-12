@@ -41,6 +41,12 @@ services:
       - "3000:3000"
     env_file:
       - ./frontend/.env
+    environment:
+      # Bind mounts do Windows/macOS não propagam eventos inotify para dentro
+      # do container, então o hot reload do Next.js não dispara sozinho.
+      # O polling resolve ao custo de um pouco de CPU — só vale em dev.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ./frontend:/app:rw
       - /app/node_modules
@@ -51,11 +57,16 @@ services:
     networks:
       - imobly-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      # `wget` e não `curl`: a imagem node:*-alpine não traz curl, então o
+      # healthcheck anterior falhava sempre ("executable file not found") e o
+      # container ficava permanentemente unhealthy mesmo servindo 200 OK.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      # O primeiro compile do `next dev` leva ~25s; margem para não marcar
+      # unhealthy durante a inicialização normal.
+      start_period: 90s
 
 volumes:
   backend_uploads:

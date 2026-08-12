@@ -1,5 +1,3 @@
-version: '3.8'
-
 networks:
   imobly_network:
     driver: bridge
@@ -8,33 +6,50 @@ services:
   backend:
     build:
       context: .
-      target: development
+      # Estágio `production`: sem dependências de desenvolvimento, sem vim/git,
+      # e rodando como usuário não-root. Antes apontava para `development`,
+      # o que empacotava o toolchain de dev numa imagem chamada "prod".
+      target: production
     container_name: imobly_backend_prod
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # O módulo é src.main — `app.main` não existe neste repositório e o
+    # container subia e morria imediatamente.
+    # As migrations rodam antes da aplicação: se falharem, o container para
+    # em vez de servir tráfego contra um schema desatualizado.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn src.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     environment:
       ENVIRONMENT: production
       DATABASE_URL: ${DATABASE_URL_PROD}
-      # Supabase Production Database
+      # Conexão DIRETA (porta 5432) usada só pelas migrations — o pooler do
+      # Supabase (6543, transaction pooling) não sustenta DDL de forma confiável.
+      ALEMBIC_DATABASE_URL: ${ALEMBIC_DATABASE_URL}
       DB_SCHEMA: ${DB_SCHEMA:-public}
-      
-      # Security - DEVE SER IGUAL AO AUTH-API
-      SECRET_KEY: ${SECRET_KEY}
+
+      # Supabase — obrigatórios: sem eles a aplicação não valida tokens nem
+      # acessa o Storage. `validate_runtime()` aborta o startup fora de dev
+      # se o segredo JWT estiver ausente.
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-${SECRET_KEY}}
+      STORAGE_MODE: ${STORAGE_MODE:-supabase}
+
       ALGORITHM: ${ALGORITHM:-HS256}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
-      
+
       # CORS
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
-      
+
       # Project
       PROJECT_NAME: ${PROJECT_NAME:-Imóvel Gestão API}
       VERSION: ${VERSION:-1.0.0}
       API_V1_STR: ${API_V1_STR:-/api/v1}
-      
+
       # Server
       DEBUG: ${DEBUG:-false}
-      
+
       # File Upload
       UPLOAD_DIR: /app/uploads
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-5242880}
@@ -45,7 +60,19 @@ services:
       - imobly_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # Usa o Python da própria imagem em vez de `curl`: o estágio `production`
+      # não instala curl, então o healthcheck anterior falharia sempre — o mesmo
+      # defeito que deixava o frontend permanentemente unhealthy.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          try:
+              sys.exit(0 if urllib.request.urlopen("http://localhost:8000/health", timeout=5).status == 200 else 1)
+          except Exception:
+              sys.exit(1)
       interval: 30s
       timeout: 10s
       retries: 3

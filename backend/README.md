@@ -17,6 +17,7 @@ Sistema de gestão imobiliária completo desenvolvido em Python com FastAPI. Est
   - [Opção 1: Docker (Recomendado)](#opção-1-docker-recomendado)
   - [Opção 2: Ambiente Virtual](#opção-2-ambiente-virtual-python)
 - [Configuração do Banco de Dados](#-configuração-do-banco-de-dados)
+- [Migrations (Alembic)](#️-migrations-alembic)
 - [Testes](#-testes)
 - [Deploy em Produção](#-deploy-em-produção)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
@@ -51,7 +52,7 @@ Sistema de gestão imobiliária completo desenvolvido em Python com FastAPI. Est
 - ✅ **Autenticação JWT**: Integração com Auth-API
 - ✅ **Upload de Arquivos**: Documentos e imagens
 - ✅ **Validação de Dados**: Schemas Pydantic robustos
-- ✅ **Testes Automatizados**: 130+ testes com >90% coverage
+- ✅ **Testes Automatizados**: suíte pytest com testes de isolamento multi-tenant
 
 ---
 
@@ -143,16 +144,24 @@ pip install -r requirements-dev.txt  # Para desenvolvimento
 cp .env.example .env
 # Edite .env com suas credenciais
 
-# 5. Suba banco PostgreSQL (com Docker)
-docker compose up -d postgres
+# 5. Banco de dados
+# Não há serviço de Postgres local no docker-compose — o projeto conecta
+# direto no Postgres do Supabase via DATABASE_URL (veja a seção abaixo).
+# O schema é criado/atualizado pelo Alembic, não pela aplicação:
+alembic upgrade head
 
 # 6. Execute a aplicação
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 # 7. Acesse
 # API: http://localhost:8000
 # Docs: http://localhost:8000/api/v1/docs
 ```
+
+> Veja [`alembic/README.md`](alembic/README.md) para instruções completas de
+> migrations — incluindo como apontar `ALEMBIC_DATABASE_URL` para a conexão
+> direta do Postgres (porta 5432), já que o pooler do Supabase (6543) não
+> sustenta DDL de forma confiável.
 
 ---
 
@@ -211,19 +220,35 @@ DATABASE_URL_PROD=postgresql://postgres.yyeldattafklyutbbnhu:[SUA_SENHA]@aws-0-u
 
 ---
 
+## 🗃️ Migrations (Alembic)
+
+O schema é gerenciado **exclusivamente** pelo Alembic — a aplicação não cria
+tabelas em runtime.
+
+```bash
+make migrate           # aplicar migrations pendentes
+make migrate-sql       # ver o SQL sem aplicar
+make migration m="..."  # gerar uma nova migration (autogenerate)
+```
+
+Aponte `ALEMBIC_DATABASE_URL` para a conexão **direta** do Postgres (porta
+5432) — o pooler do Supabase (6543, transaction pooling) não sustenta DDL
+longo. Detalhes completos, incluindo como adotar em um banco já existente:
+[`alembic/README.md`](alembic/README.md).
+
+---
+
 ## 🧪 Testes
 
 ### Rodar Testes com Docker
 
+O estágio `testing` do `Dockerfile` roda lint + mypy + pytest com coverage.
+Não existe serviço `postgres` nem profile `test` no `docker-compose.yml` deste
+repositório — construa e rode o estágio diretamente:
+
 ```bash
-# Testes + Linting completo
-docker compose --profile test up test-runner
-
-# Apenas testes
-docker compose --profile test run --rm test-runner pytest -v
-
-# Testes com coverage
-docker compose --profile test run --rm test-runner pytest --cov=app --cov-report=html
+docker build --target testing -t imobly-backend-test .
+docker run --rm --env-file .env imobly-backend-test
 ```
 
 ### Rodar Testes Localmente
@@ -233,30 +258,27 @@ docker compose --profile test run --rm test-runner pytest --cov=app --cov-report
 source venv/bin/activate  # Linux/Mac
 .\venv\Scripts\activate   # Windows
 
-# Todos os testes
+# Todos os testes (usa TEST_DATABASE_URL — veja tests/conftest.py)
 pytest -v
 
 # Testes com coverage
-pytest --cov=app --cov-report=html --cov-report=term-missing
+pytest --cov=src --cov-report=html --cov-report=term-missing
 
-# Testes específicos
-pytest tests/unit/test_properties.py -v
-pytest tests/integration/ -v
+# Um arquivo específico
+pytest tests/test_properties.py -v
 
 # Linting
-black --check app tests
-isort --check app tests
-flake8 app tests
-mypy app
+black --check src tests
+isort --check src tests
+flake8 src tests
+mypy src
 ```
 
 **Relatório de Coverage:**  
 Após rodar testes com `--cov-report=html`, abra: `htmlcov/index.html`
 
-**Status Atual:**
-- ✅ 130+ testes
-- ✅ >90% coverage
-- ✅ CI/CD com GitHub Actions
+**Status Atual:** rode `pytest -v` para ver a contagem corrente — evite fixar
+um número aqui, ele fica desatualizado a cada suíte nova.
 
 ---
 

@@ -6,14 +6,24 @@ services:
     plan: free
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Migrations rodam ANTES do novo release receber tráfego. Se falharem, o
+    # deploy é abortado e a versão anterior continua no ar.
+    preDeployCommand: alembic upgrade head
+    # O módulo é src.main — `app.main` não existe neste repositório.
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: DATABASE_URL
         sync: false  # Configure manualmente no Render Dashboard
+      # Conexão DIRETA (porta 5432) usada apenas pelas migrations — o pooler
+      # do Supabase (6543, transaction pooling) não é adequado para DDL.
+      - key: ALEMBIC_DATABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false  # Segredo JWT do projeto Supabase (Settings → API)
       - key: SECRET_KEY
-        sync: false  # ⚠️ IMPORTANTE: Mesma chave do Auth-API para validar JWT
+        sync: false  # Alias retrocompatível de SUPABASE_JWT_SECRET
       - key: ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
