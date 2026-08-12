@@ -52,10 +52,6 @@ def get_db():
         db.close()
 
 
-# Função para criar tabelas
-def create_tables():
-    """
-    Cria todas as tabelas definidas pelos modelos SQLAlchemy.
-    Os modelos serão importados automaticamente pelos módulos.
-    """
-    Base.metadata.create_all(bind=engine)
+# NOTA: não existe mais `create_tables()`. O schema é gerenciado exclusivamente
+# pelo Alembic (`make migrate` / `alembic upgrade head`). Criar tabelas a partir
+# dos modelos em runtime escondia divergências entre o ORM e o banco real.

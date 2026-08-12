@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.security import get_current_user_local_id, get_storage_service
+from src.core.integrity import traduzir_erros_de_integridade
+from src.core.ownership import assert_owned_optional
 from src.core.supabase_storage_service import SupabaseStorageService
 from .repository import PropertyRepository
 from .schema import PropertyCreate, PropertyResponse, PropertyUpdate, PropertyCreateInternal
@@ -63,9 +65,14 @@ def get_available_properties(
 def create_property(
     property_data: PropertyCreate,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: PropertyRepository = Depends(get_property_repository),
 ):
     """Criar nova propriedade"""
+    from src.tenants.models import Tenant
+
+    # tenant_id é opcional e vem do cliente: impede vincular inquilino alheio.
+    assert_owned_optional(db, Tenant, property_data.tenant_id, user_id)
 
     # Criar schema interno com user_id
     property_create_internal = PropertyCreateInternal(
@@ -99,9 +106,13 @@ def update_property(
     property_id: int,
     property_data: PropertyUpdate,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: PropertyRepository = Depends(get_property_repository),
 ):
     """Atualizar propriedade"""
+    from src.tenants.models import Tenant
+
+    assert_owned_optional(db, Tenant, property_data.tenant_id, user_id)
 
     updated_property = repository.update(property_id, user_id, property_data)
     if not updated_property:
@@ -116,11 +127,21 @@ def update_property(
 def delete_property(
     property_id: int,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: PropertyRepository = Depends(get_property_repository),
 ):
-    """Deletar propriedade"""
+    """
+    Deletar propriedade.
 
-    success = repository.delete(property_id, user_id)
+    Contratos, pagamentos e despesas do imóvel são removidos em cascata
+    (política definida na revisão 0006).
+    """
+
+    with traduzir_erros_de_integridade(
+        db,
+        conflito_fk="Imóvel não pode ser removido: existem dados vinculados a ele.",
+    ):
+        success = repository.delete(property_id, user_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

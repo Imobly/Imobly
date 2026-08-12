@@ -6,6 +6,7 @@ Lógica de interação com Supabase Auth e tabela users
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from supabase import Client
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import logging
 
@@ -53,12 +54,23 @@ class AuthRepository:
         if not self.db:
             raise Exception("Database session não configurada no AuthRepository")
         
-        # Busca usuário por email
-        user = self.db.query(User).filter(User.email == email).first()
-        
+        # Busca pela chave imutável; e-mail apenas como fallback legado
+        user = self.db.query(User).filter(User.supabase_uid == supabase_user_id).first()
+
+        if not user:
+            legacy = self.db.query(User).filter(User.email == email).first()
+            if legacy is not None and not legacy.supabase_uid:
+                legacy.supabase_uid = supabase_user_id
+                self.db.commit()
+                self.db.refresh(legacy)
+                user = legacy
+            elif legacy is not None:
+                user = legacy
+
         if not user:
             # Cria novo usuário
             user = User(
+                supabase_uid=supabase_user_id,
                 email=email,
                 username=username,
                 full_name=full_name or username,
@@ -67,10 +79,18 @@ class AuthRepository:
                 is_superuser=False
             )
             self.db.add(user)
-            self.db.commit()
-            self.db.refresh(user)
-            logger.info(f"Usuário local criado: {email} (id={user.id})")
-        
+            try:
+                self.db.commit()
+                self.db.refresh(user)
+            except IntegrityError:
+                # Corrida com outra requisição do mesmo usuário — releia a linha vencedora.
+                self.db.rollback()
+                user = self.db.query(User).filter(User.supabase_uid == supabase_user_id).first()
+                if user is None:
+                    raise
+            else:
+                logger.info(f"Usuário local criado: {email} (id={user.id})")
+
         return user
     
     async def authenticate_user(self, email: str, password: str) -> Dict[str, Any]:
@@ -213,9 +233,24 @@ class AuthRepository:
             return None
         return self.db.query(User).filter(User.email == email).first()
 
-    def update_local_user(self, email: str, full_name: Optional[str] = None, new_email: Optional[str] = None) -> Optional[User]:
+    def get_local_user_by_uid(self, supabase_uid: str) -> Optional[User]:
         """
-        Atualiza campos do usuário na tabela local (full_name / email).
+        Busca o registro local pela chave de identidade imutável.
+
+        Preferível a `get_local_user_by_email`: o e-mail muda, o uid não.
+        """
+        if not self.db:
+            return None
+        return self.db.query(User).filter(User.supabase_uid == supabase_uid).first()
+
+    def update_local_user(self, supabase_uid: str, full_name: Optional[str] = None) -> Optional[User]:
+        """
+        Atualiza campos editáveis do usuário na tabela local.
+
+        Só `full_name` é editável por aqui. A troca de e-mail foi removida de
+        propósito: o e-mail é dado de autenticação e alterá-lo apenas na tabela
+        local dessincronizava a conta do Supabase. Ela precisa passar pelo fluxo
+        de verificação de posse do novo endereço.
 
         Returns:
             User atualizado, ou None se não encontrado.
@@ -223,16 +258,18 @@ class AuthRepository:
         if not self.db:
             raise Exception("Database session não configurada no AuthRepository")
 
-        user = self.db.query(User).filter(User.email == email).first()
+        user = self.db.query(User).filter(User.supabase_uid == supabase_uid).first()
         if not user:
             return None
 
         if full_name is not None:
             user.full_name = full_name
-        if new_email is not None:
-            user.email = new_email
 
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(user)
         return user
 

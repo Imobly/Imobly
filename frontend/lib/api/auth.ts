@@ -71,8 +71,13 @@ export async function changePassword(data: ChangePasswordRequest): Promise<void>
   })
 }
 
-/** Atualiza nome/email do usuário e sincroniza o cache local. */
-export async function updateUser(userData: { email?: string; full_name?: string }): Promise<User> {
+/**
+ * Atualiza o nome do usuário e sincroniza o cache local.
+ *
+ * O e-mail não entra aqui: é credencial de autenticação e alterá-lo exige
+ * verificação de posse do novo endereço (o backend rejeita a troca com 400).
+ */
+export async function updateUser(userData: { full_name?: string }): Promise<User> {
   const user = toUser(await apiClient.put<UserResponse>(`${AUTH_BASE}/me`, userData))
   if (typeof window !== 'undefined') {
     localStorage.setItem('user', JSON.stringify(user))

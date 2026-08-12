@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.security import get_current_user_local_id
+from src.core.ownership import assert_owned, assert_owned_optional
 from .repository import PaymentRepository
 from .schema import (
     PaymentCreate,
@@ -151,6 +152,15 @@ def register_payment(
     else:
         pay_status = "pendente"
 
+    # Quando informados explicitamente, property_id/tenant_id são do cliente e
+    # precisam ser validados. Quando omitidos, herdam do contrato — que já foi
+    # verificado como pertencente ao usuário logo acima.
+    from src.properties.models import Property
+    from src.tenants.models import Tenant
+
+    assert_owned_optional(db, Property, data.property_id, user_id)
+    assert_owned_optional(db, Tenant, data.tenant_id, user_id)
+
     property_id = data.property_id or contract.property_id
     tenant_id = data.tenant_id or contract.tenant_id
 
@@ -206,15 +216,24 @@ def bulk_confirm_payments(
 def create_payment(
     payment_data: PaymentCreate,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: PaymentRepository = Depends(get_payment_repository),
 ):
     """Criar novo pagamento"""
+    from src.contracts.models import Contract
+    from src.properties.models import Property
+    from src.tenants.models import Tenant
+
+    # As FKs vêm do cliente: valide a posse antes de gravar (guarda anti-IDOR).
+    assert_owned(db, Property, payment_data.property_id, user_id)
+    assert_owned(db, Tenant, payment_data.tenant_id, user_id)
+    assert_owned(db, Contract, payment_data.contract_id, user_id)
 
     payment_create_internal = PaymentCreateInternal(
         **payment_data.dict(exclude={'user_id'}),
         user_id=user_id
     )
-    
+
     new_payment = repository.create(payment_create_internal)
     return new_payment
 

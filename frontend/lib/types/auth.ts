@@ -42,5 +42,5 @@ export interface AuthContextType {
   register: (userData: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (data: ChangePasswordRequest) => Promise<void>;
-  updateUser: (userData: { email?: string; full_name?: string }) => Promise<User>;
+  updateUser: (userData: { full_name?: string }) => Promise<User>;
 }

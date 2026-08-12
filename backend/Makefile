@@ -1,4 +1,5 @@
-.PHONY: help setup run-dev stop test lint format install clean health
+.PHONY: help setup run-dev stop test lint format install clean health \
+        migrate migrate-down migrate-history migration stamp-baseline migrate-sql
 
 help:
 	@echo "🚀 Backend Makefile"
@@ -19,6 +20,14 @@ help:
 	@echo "  make test          - Run tests with coverage"
 	@echo "  make lint          - Run linters"
 	@echo "  make format        - Format code"
+	@echo ""
+	@echo "🗄️  Migrations (Alembic):"
+	@echo "  make migrate           - Aplicar migrations pendentes (upgrade head)"
+	@echo "  make migrate-sql       - Imprimir o SQL sem aplicar (revisão antes do deploy)"
+	@echo "  make migrate-down      - Reverter a última migration"
+	@echo "  make migrate-history   - Histórico e revisão atual"
+	@echo "  make migration m=\"msg\" - Gerar nova migration (autogenerate)"
+	@echo "  make stamp-baseline    - Marcar banco EXISTENTE como estando na 0001"
 	@echo ""
 	@echo "🧹 Utilities:"
 	@echo "  make clean         - Clean containers and cache"
@@ -67,3 +76,35 @@ lint:
 format:
 	black src tests
 	isort src tests
+
+# ============================================================
+# Migrations (Alembic)
+# ------------------------------------------------------------
+# Aponte ALEMBIC_DATABASE_URL para a conexão DIRETA do Postgres (porta 5432).
+# O pooler do Supabase (6543, transaction pooling) não é adequado para DDL.
+# ============================================================
+migrate:
+	alembic upgrade head
+
+migrate-sql:
+	@echo "-- SQL das migrations pendentes (nada é aplicado) --"
+	@alembic upgrade head --sql
+
+migrate-down:
+	alembic downgrade -1
+
+migrate-history:
+	@alembic history --verbose
+	@echo "--- Revisão atual no banco ---"
+	@alembic current
+
+migration:
+ifndef m
+	$(error Uso: make migration m="descricao da mudanca")
+endif
+	alembic revision --autogenerate -m "$(m)"
+
+# Somente para o banco JÁ EXISTENTE: registra a 0001 como aplicada sem rodar DDL.
+stamp-baseline:
+	@echo "⚠️  Marca o banco atual como estando na revisão 0001 (nenhum DDL é executado)."
+	alembic stamp 0001

@@ -55,8 +55,9 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
+        // O e-mail é credencial de autenticação e não é editável por aqui:
+        // trocá-lo apenas na tabela local dessincronizava a conta do Supabase.
         body: JSON.stringify({
-          email: profileData.email,
           full_name: profileData.name,
         }),
       });
@@ -180,9 +181,13 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
                     name="email"
                     type="email"
                     value={profileData.email}
-                    onChange={handleProfileChange}
-                    disabled={isLoading}
+                    readOnly
+                    disabled
+                    className="bg-muted cursor-not-allowed"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    O e-mail é usado para entrar na conta e não pode ser alterado aqui.
+                  </p>
                 </div>
                 {errors.profile && (
                   <p className="text-sm text-red-500">{errors.profile}</p>

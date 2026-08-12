@@ -56,8 +56,9 @@ export default function SettingsPage() {
     setProfileSuccess('');
 
     try {
+      // O e-mail nao e enviado: e credencial de autenticacao e sua troca
+      // exige verificacao de posse do novo endereco.
       await updateUser({
-        email: profileData.email,
         full_name: profileData.name,
       });
       
@@ -205,10 +206,14 @@ export default function SettingsPage() {
                         name="email"
                         type="email"
                         value={profileData.email}
-                        onChange={handleProfileChange}
-                        disabled={profileLoading}
+                        readOnly
+                        disabled
+                        className="bg-muted cursor-not-allowed"
                         placeholder="seu@email.com"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        O e-mail é usado para entrar na conta e não pode ser alterado aqui.
+                      </p>
                     </div>
                   </div>
                   

@@ -5,10 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from src.config import settings
-from src.database import create_tables
 from src.scheduler import start_scheduler, shutdown_scheduler
 
 # Importar routers de todos os módulos
@@ -32,7 +30,9 @@ _IS_PROD = settings.ENVIRONMENT in {"prod", "production"}
 async def lifespan(app: FastAPI):
     # Startup
     settings.validate_runtime()
-    create_tables()
+    # O schema é gerenciado exclusivamente pelo Alembic (`alembic upgrade head`),
+    # executado como passo de deploy antes da aplicação subir. Criar tabelas aqui
+    # mascarava a divergência entre os modelos e o banco real.
     start_scheduler()
     yield
     # Shutdown
@@ -87,11 +87,15 @@ async def catch_exceptions_middleware(request: Request, call_next):
         )
 
 
-# Criar diretório de uploads se não existir
+# Criar diretório de uploads se não existir (fallback local de escrita)
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
-# Servir arquivos estáticos (uploads) - apenas para fallback local
-app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+# ATENÇÃO — não remonte /uploads como StaticFiles.
+# O mount servia todo o diretório sem autenticação: documentos de inquilinos
+# (RG, CPF, CNH, comprovante de renda) ficavam acessíveis por URL adivinhável,
+# já que o nome é `{timestamp}_{arquivo}`. Arquivos devem ser servidos apenas
+# por endpoint autenticado que valide a posse e devolva uma signed URL de
+# validade curta do Supabase Storage.
 
 # Incluir routers com prefixos e tags
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])

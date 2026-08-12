@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import HTTPException, Request, status, Depends
 from fastapi.security import HTTPBearer
 from fastapi.security.http import HTTPAuthorizationCredentials
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from supabase import create_client, Client
 
@@ -165,26 +166,65 @@ async def get_current_user_local_id(
             detail="Email não encontrado no token"
         )
 
-    # Busca usuário na tabela local
-    user = db.query(User).filter(User.email == email).first()
+    # 1. Resolução pela chave de identidade imutável.
+    user = db.query(User).filter(User.supabase_uid == supabase_uid).first()
 
-    if not user:
-        # Se não existe, cria com as informações disponíveis
-        supabase_id = current_user["id"]
+    if user is None:
+        # 2. Linha legada, anterior à coluna supabase_uid: localiza por e-mail
+        #    UMA única vez e reivindica o uid, migrando a identidade.
+        legacy = db.query(User).filter(User.email == email).first()
+        if legacy is not None:
+            if legacy.supabase_uid and legacy.supabase_uid != supabase_uid:
+                # O e-mail pertence a outra identidade do Supabase. Nunca
+                # sequestre a linha — falhe alto para investigação.
+                logger.error(
+                    "Conflito de identidade: e-mail %s pertence ao uid %s, token traz %s",
+                    email, legacy.supabase_uid, supabase_uid,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Conflito de identidade da conta. Contate o suporte.",
+                )
+            legacy.supabase_uid = supabase_uid
+            db.commit()
+            db.refresh(legacy)
+            user = legacy
+            logger.info("Identidade migrada para supabase_uid: %s (id=%s)", email, user.id)
+
+    if user is None:
+        # 3. Primeiro acesso: cria o registro local.
         username = email.split("@")[0]
-
         user = User(
+            supabase_uid=supabase_uid,
             email=email,
             username=username,
             full_name=username,
-            hashed_password=supabase_id,
+            hashed_password=supabase_uid,
             is_active=True,
             is_superuser=False
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
-        logger.info(f"Usuário local criado automaticamente: {email} (id={user.id})")
+        try:
+            db.commit()
+            db.refresh(user)
+        except IntegrityError:
+            # Requisições concorrentes do mesmo usuário novo (o dashboard dispara
+            # várias em paralelo): a outra venceu a corrida — releia a linha dela.
+            db.rollback()
+            user = db.query(User).filter(User.supabase_uid == supabase_uid).first()
+            if user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Não foi possível provisionar o usuário",
+                )
+        else:
+            logger.info(f"Usuário local criado automaticamente: {email} (id={user.id})")
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Conta desativada",
+        )
 
     # Armazena no cache de processo e no estado da requisição para reutilização
     _local_id_cache[supabase_uid] = user.id

@@ -96,7 +96,11 @@ async def register(
 def _user_response(current_user: dict, auth_repo: AuthRepository) -> UserResponse:
     """Monta o UserResponse combinando o token com o registro local."""
     email = current_user.get("email") or ""
-    local_user = auth_repo.get_local_user_by_email(email) if email else None
+    # Resolve pela chave imutável; e-mail só como fallback para linhas legadas
+    # ainda sem supabase_uid preenchido.
+    local_user = auth_repo.get_local_user_by_uid(current_user["id"])
+    if local_user is None and email:
+        local_user = auth_repo.get_local_user_by_email(email)
     return UserResponse(
         id=str(local_user.id) if local_user else current_user["id"],
         email=local_user.email if local_user else email,
@@ -125,7 +129,10 @@ async def update_current_user_profile(
     auth_repo: AuthRepository = Depends(get_auth_repository),
 ):
     """
-    Atualiza nome completo / email do usuário na tabela local.
+    Atualiza o nome completo do usuário na tabela local.
+
+    A troca de e-mail NÃO é aceita aqui: o e-mail é credencial de autenticação,
+    e alterá-lo somente na tabela local dessincroniza a conta do Supabase.
     """
     email = current_user.get("email")
     if not email:
@@ -134,10 +141,18 @@ async def update_current_user_profile(
             detail="Email não encontrado no token",
         )
 
+    if user_data.email is not None and user_data.email.lower() != email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "A alteração de e-mail não é feita por esta rota — ela exige "
+                "verificação de posse do novo endereço."
+            ),
+        )
+
     updated = auth_repo.update_local_user(
-        email=email,
+        supabase_uid=current_user["id"],
         full_name=user_data.full_name,
-        new_email=user_data.email,
     )
     if not updated:
         raise HTTPException(

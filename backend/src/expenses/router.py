@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.security import get_current_user_local_id
+from src.core.ownership import assert_owned
 from .repository import ExpenseRepository
 from .schema import ExpenseCreate, ExpenseResponse, ExpenseUpdate, ExpenseCreateInternal
 
@@ -52,9 +53,14 @@ def get_expenses(
 def create_expense(
     expense_data: ExpenseCreate,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: ExpenseRepository = Depends(get_expense_repository),
 ):
     """Criar nova despesa"""
+    from src.properties.models import Property
+
+    # property_id vem do cliente: valide a posse antes de gravar.
+    assert_owned(db, Property, expense_data.property_id, user_id)
 
     expense_create_internal = ExpenseCreateInternal(
         **expense_data.dict(exclude={'user_id'}),

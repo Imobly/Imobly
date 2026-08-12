@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.security import get_current_user_local_id
+from src.core.ownership import assert_owned, assert_owned_optional
 from .repository import ContractRepository
 from .schema import ContractCreate, ContractCreateInternal, ContractResponse, ContractUpdate
 
@@ -77,6 +78,15 @@ def create_contract(
     db: Session = Depends(get_db),
 ):
     """Criar novo contrato"""
+    from src.properties.models import Property
+    from src.tenants.models import Tenant
+
+    # property_id/tenant_id vêm do cliente: sem esta guarda era possível criar
+    # um contrato sobre o imóvel de outro usuário — e o bloco abaixo alterava
+    # o status desse imóvel alheio.
+    assert_owned(db, Property, contract_data.property_id, user_id)
+    assert_owned(db, Tenant, contract_data.tenant_id, user_id)
+
     internal = ContractCreateInternal(
         **contract_data.dict(),
         user_id=user_id,
@@ -85,12 +95,10 @@ def create_contract(
 
     # Auto-atualizar status do imóvel para 'occupied'
     if new_contract.status == "ativo":
-        from src.properties.models import Property
-        prop = db.query(Property).filter(Property.id == new_contract.property_id).first()
-        if prop:
-            prop.status = "occupied"
-            prop.tenant_id = new_contract.tenant_id
-            db.commit()
+        prop = assert_owned(db, Property, new_contract.property_id, user_id)
+        prop.status = "occupied"
+        prop.tenant_id = new_contract.tenant_id
+        db.commit()
 
     return new_contract
 
@@ -118,8 +126,17 @@ def update_contract(
     contract_id: int,
     contract_data: ContractUpdate,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repo: ContractRepository = Depends(get_contract_repository),
 ):
+    from src.properties.models import Property
+    from src.tenants.models import Tenant
+
+    # O update permite remanejar o contrato para outro imóvel/inquilino —
+    # ambos precisam pertencer ao usuário.
+    assert_owned_optional(db, Property, contract_data.property_id, user_id)
+    assert_owned_optional(db, Tenant, contract_data.tenant_id, user_id)
+
     updated = repo.update(contract_id, user_id, contract_data)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
@@ -141,17 +158,17 @@ def update_contract_status(
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
 
-    # Auto-atualizar status do imóvel
+    # Auto-atualizar status do imóvel — filtrando por dono (era escrita
+    # cross-tenant: o imóvel era buscado só por id).
     from src.properties.models import Property
-    prop = db.query(Property).filter(Property.id == updated.property_id).first()
-    if prop:
-        if new_status == "ativo":
-            prop.status = "occupied"
-            prop.tenant_id = updated.tenant_id
-        elif new_status in ("inativo", "expirado"):
-            prop.status = "vacant"
-            prop.tenant_id = None
-        db.commit()
+    prop = assert_owned(db, Property, updated.property_id, user_id)
+    if new_status == "ativo":
+        prop.status = "occupied"
+        prop.tenant_id = updated.tenant_id
+    elif new_status in ("inativo", "expirado"):
+        prop.status = "vacant"
+        prop.tenant_id = None
+    db.commit()
 
     return updated
 
@@ -189,9 +206,9 @@ def delete_contract(
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
 
-    # Liberar imóvel
-    prop = db.query(Property).filter(Property.id == contract.property_id).first()
-    if prop and contract.status == "ativo":
+    # Liberar imóvel — filtrando por dono (era escrita cross-tenant).
+    if contract.status == "ativo":
+        prop = assert_owned(db, Property, contract.property_id, user_id)
         prop.status = "vacant"
         prop.tenant_id = None
 

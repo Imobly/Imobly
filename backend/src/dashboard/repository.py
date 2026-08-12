@@ -56,7 +56,10 @@ class DashboardRepository:
 
         active = (
             self.db.query(func.count(Tenant.id))
-            .join(Contract, Tenant.contract_id == Contract.id)
+            .join(
+                Contract,
+                and_(Tenant.contract_id == Contract.id, Contract.user_id == user_id),
+            )
             .filter(Tenant.user_id == user_id, Contract.status == "ativo")
             .scalar()
         ) or 0
@@ -322,13 +325,23 @@ class DashboardRepository:
                 Payment.due_date,
                 Payment.status,
             )
-            .join(Tenant, Payment.tenant_id == Tenant.id)
-            .join(Property, Payment.property_id == Property.id)
+            # O predicado de dono vai NO JOIN, não só no WHERE do Payment:
+            # um pagamento com FK apontando para entidade de terceiro passaria
+            # a expor nome de inquilino e de imóvel alheios.
+            .join(
+                Tenant,
+                and_(Payment.tenant_id == Tenant.id, Tenant.user_id == user_id),
+            )
+            .join(
+                Property,
+                and_(Payment.property_id == Property.id, Property.user_id == user_id),
+            )
             .filter(
                 Payment.user_id == user_id,
                 Payment.status.in_(["atrasado", "parcial"]),
             )
             .order_by(Payment.due_date.asc())
+            .limit(100)
             .all()
         )
 

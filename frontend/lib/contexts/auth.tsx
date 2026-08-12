@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await authApi.changePassword(data);
   };
 
-  const updateUser = async (userData: { email?: string; full_name?: string }) => {
+  const updateUser = async (userData: { full_name?: string }) => {
     const updatedUser = await authApi.updateUser(userData);
     setUser(updatedUser);
     return updatedUser;

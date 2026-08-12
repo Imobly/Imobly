@@ -4,6 +4,7 @@ Modelo SQLAlchemy para usuários
 
 from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy.dialects.postgresql import UUID
 
 from src.database import Base
 
@@ -12,6 +13,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    # Chave de identidade: UUID do Supabase, imutável. É por ela que o usuário
+    # autenticado é resolvido. O e-mail NÃO serve para isso — ele muda.
+    supabase_uid = Column(UUID(as_uuid=False), nullable=True, unique=True, index=True)
     email = Column(String(255), nullable=False, unique=True)
     username = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
