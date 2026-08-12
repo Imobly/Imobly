@@ -68,7 +68,7 @@ class NotificationRepository:
         items = q.order_by(Notification.created_at.desc()).offset(skip).limit(limit).all()
         return items, total
 
-    def get_by_id_and_user(self, notification_id: int, user_id: int) -> Optional[Notification]:
+    def get_by_id_and_user(self, notification_id: str, user_id: int) -> Optional[Notification]:
         return (
             self.db.query(Notification)
             .filter(Notification.id == notification_id, Notification.user_id == user_id)
@@ -102,7 +102,7 @@ class NotificationRepository:
         return obj
 
     def update(
-        self, notification_id: int, user_id: int, data: NotificationUpdate
+        self, notification_id: str, user_id: int, data: NotificationUpdate
     ) -> Optional[Notification]:
         obj = self.get_by_id_and_user(notification_id, user_id)
         if not obj:
@@ -115,7 +115,7 @@ class NotificationRepository:
         self.db.refresh(obj)
         return obj
 
-    def mark_as_read(self, notification_id: int, user_id: int) -> Optional[Notification]:
+    def mark_as_read(self, notification_id: str, user_id: int) -> Optional[Notification]:
         obj = self.get_by_id_and_user(notification_id, user_id)
         if not obj:
             return None
@@ -133,7 +133,7 @@ class NotificationRepository:
         self.db.commit()
         return result
 
-    def delete(self, notification_id: int, user_id: int) -> bool:
+    def delete(self, notification_id: str, user_id: int) -> bool:
         obj = self.get_by_id_and_user(notification_id, user_id)
         if not obj:
             return False

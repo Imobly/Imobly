@@ -49,7 +49,7 @@ class NotificationUpdate(BaseModel):
 
 
 class NotificationResponse(NotificationBase):
-    # id is int in DB but the frontend TypeScript expects string
+    # PK textual (UUID), consistente com o banco e com o padrão de `expenses`
     id: str
     user_id: int
     created_at: datetime

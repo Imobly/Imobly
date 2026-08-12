@@ -3,7 +3,7 @@ Modelos SQLAlchemy para inquilinos (tenants)
 """
 
 from datetime import datetime
-from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import relationship
 
 from src.database import Base
@@ -12,12 +12,20 @@ from src.database import Base
 class Tenant(Base):
     __tablename__ = "tenants"
 
+    # Unicidade é POR LOCADOR, não global: dois locadores podem ter o mesmo
+    # inquilino (cenário corriqueiro). Antes eram UNIQUE globais, o que gerava
+    # 500 no cadastro e permitia enumerar inquilinos de outros clientes.
+    __table_args__ = (
+        Index("ux_tenants_user_email", "user_id", text("lower(email)"), unique=True),
+        Index("ux_tenants_user_cpf", "user_id", "cpf_cnpj", unique=True),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=False, index=True)  # Reference to user in auth-api
+    user_id = Column(Integer, nullable=False, index=True)  # dono (locador)
     name = Column(String(255), nullable=False)
-    email = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255), nullable=False)
     phone = Column(String(20), nullable=False)
-    cpf_cnpj = Column(String(20), unique=True, nullable=False)
+    cpf_cnpj = Column(String(20), nullable=False)
     birth_date = Column(Date, nullable=True)
     profession = Column(String(100), nullable=False)
     emergency_contact = Column(JSON)  # {name, phone, relationship}

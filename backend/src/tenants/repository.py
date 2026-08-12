@@ -39,10 +39,20 @@ class TenantRepository:
         )
 
     def get_by_email(self, email: str, user_id: int) -> Optional[Tenant]:
-        """Buscar inquilino por email"""
+        """
+        Buscar inquilino por email (case-insensitive).
+
+        A comparação precisa bater com o índice único `ux_tenants_user_email`,
+        que é sobre `lower(email)` — senão a checagem passa e o INSERT estoura.
+        """
+        from sqlalchemy import func
+
         return (
             self.db.query(Tenant)
-            .filter(Tenant.email == email, Tenant.user_id == user_id)
+            .filter(
+                func.lower(Tenant.email) == (email or "").lower(),
+                Tenant.user_id == user_id,
+            )
             .first()
         )
 
@@ -87,19 +97,26 @@ class TenantRepository:
 
     def get_active_tenants(self, user_id: int) -> List[Tenant]:
         """Buscar inquilinos ativos (com contrato ativo)"""
+        from sqlalchemy import and_
         return (
             self.db.query(Tenant)
-            .join(Contract, Tenant.contract_id == Contract.id)
+            .join(
+                Contract,
+                and_(Tenant.contract_id == Contract.id, Contract.user_id == user_id),
+            )
             .filter(Tenant.user_id == user_id, Contract.status == "ativo")
             .all()
         )
 
     def get_inactive_tenants(self, user_id: int) -> List[Tenant]:
         """Buscar inquilinos inativos (sem contrato ativo)"""
-        from sqlalchemy import or_
+        from sqlalchemy import and_, or_
         return (
             self.db.query(Tenant)
-            .outerjoin(Contract, Tenant.contract_id == Contract.id)
+            .outerjoin(
+                Contract,
+                and_(Tenant.contract_id == Contract.id, Contract.user_id == user_id),
+            )
             .filter(
                 Tenant.user_id == user_id,
                 or_(Tenant.contract_id.is_(None), Contract.status != "ativo"),
@@ -134,9 +151,13 @@ class TenantRepository:
 
     def count_active_tenants(self, user_id: int) -> int:
         """Contar inquilinos ativos (com contrato ativo)"""
+        from sqlalchemy import and_
         return (
             self.db.query(Tenant)
-            .join(Contract, Tenant.contract_id == Contract.id)
+            .join(
+                Contract,
+                and_(Tenant.contract_id == Contract.id, Contract.user_id == user_id),
+            )
             .filter(Tenant.user_id == user_id, Contract.status == "ativo")
             .count()
         )

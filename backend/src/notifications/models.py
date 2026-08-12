@@ -2,6 +2,7 @@
 Modelo SQLAlchemy para o módulo de notificações
 """
 
+import uuid
 from datetime import date, datetime
 from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, JSON, String, Text, func
 
@@ -11,7 +12,10 @@ from src.database import Base
 class Notification(Base):
     __tablename__ = "notifications"
 
-    id = Column(Integer, primary_key=True, index=True)
+    # PK textual (UUID), igual ao padrão já usado em `expenses`. O banco sempre
+    # foi varchar(36); o modelo é que declarava Integer, e essa divergência
+    # deixava o módulo inteiro respondendo 500.
+    id = Column(String(36), primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Tipo e conteúdo

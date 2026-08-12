@@ -6,10 +6,13 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.security import get_current_user_local_id, get_storage_service
+from src.core.integrity import traduzir_erros_de_integridade
+from src.core.ownership import assert_owned_optional
 from src.core.supabase_storage_service import SupabaseStorageService
 from .repository import TenantRepository
 from .schema import TenantCreate, TenantResponse, TenantUpdate, TenantCreateInternal
@@ -49,9 +52,14 @@ def get_tenants(
 def create_tenant(
     tenant_data: TenantCreate,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: TenantRepository = Depends(get_tenant_repository),
 ):
     """Criar novo inquilino"""
+    from src.contracts.models import Contract
+
+    # contract_id vem do cliente: impede vincular contrato de outro usuário.
+    assert_owned_optional(db, Contract, tenant_data.contract_id, user_id)
 
     # Verificar se email já existe
     existing_tenant = repository.get_by_email(tenant_data.email, user_id)
@@ -75,8 +83,18 @@ def create_tenant(
         **data_dict,
         user_id=user_id,
     )
-    
-    new_tenant = repository.create(tenant_create_internal)
+
+    # As checagens acima são "time-of-check/time-of-use": duas requisições
+    # concorrentes passam ambas e uma estoura no INSERT. O banco é a única
+    # fonte de verdade — traduzimos a violação em 409 em vez de 500.
+    try:
+        new_tenant = repository.create(tenant_create_internal)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Já existe um inquilino com este e-mail ou CPF/CNPJ",
+        )
     return new_tenant
 
 
@@ -102,9 +120,13 @@ def update_tenant(
     tenant_id: int,
     tenant_data: TenantUpdate,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: TenantRepository = Depends(get_tenant_repository),
 ):
     """Atualizar inquilino"""
+    from src.contracts.models import Contract
+
+    assert_owned_optional(db, Contract, tenant_data.contract_id, user_id)
 
     # Verificar se email novo já existe (se fornecido)
     if tenant_data.email:
@@ -115,7 +137,14 @@ def update_tenant(
                 detail="Email já cadastrado para outro inquilino"
             )
     
-    updated_tenant = repository.update(tenant_id, user_id, tenant_data)
+    try:
+        updated_tenant = repository.update(tenant_id, user_id, tenant_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Já existe um inquilino com este e-mail ou CPF/CNPJ",
+        )
     if not updated_tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -128,11 +157,19 @@ def update_tenant(
 def delete_tenant(
     tenant_id: int,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: TenantRepository = Depends(get_tenant_repository),
 ):
     """Deletar inquilino"""
 
-    success = repository.delete(tenant_id, user_id)
+    with traduzir_erros_de_integridade(
+        db,
+        conflito_fk=(
+            "Inquilino não pode ser removido: existem contratos ou pagamentos "
+            "vinculados a ele. Encerre-os antes de excluir."
+        ),
+    ):
+        success = repository.delete(tenant_id, user_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

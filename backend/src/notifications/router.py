@@ -123,7 +123,7 @@ def cleanup_old_notifications(
 
 @router.get("/{notification_id}/", response_model=NotificationResponse)
 def get_notification(
-    notification_id: int,
+    notification_id: str,
     user_id: int = Depends(get_current_user_local_id),
     repo: NotificationRepository = Depends(get_repo),
 ):
@@ -136,7 +136,7 @@ def get_notification(
 
 @router.put("/{notification_id}/read/", response_model=NotificationResponse)
 def mark_as_read(
-    notification_id: int,
+    notification_id: str,
     user_id: int = Depends(get_current_user_local_id),
     repo: NotificationRepository = Depends(get_repo),
 ):
@@ -149,7 +149,7 @@ def mark_as_read(
 
 @router.delete("/{notification_id}/")
 def delete_notification(
-    notification_id: int,
+    notification_id: str,
     user_id: int = Depends(get_current_user_local_id),
     repo: NotificationRepository = Depends(get_repo),
 ):
