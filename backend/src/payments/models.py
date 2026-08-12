@@ -35,7 +35,10 @@ class Payment(Base):
     due_date = Column(Date, nullable=False, index=True)
     payment_date = Column(Date, nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
-    fine_amount = Column(Numeric(10, 2), default=0)
+    # Multa e juros separados: somados num campo só, a composição da cobrança
+    # ficava impossível de auditar.
+    fine_amount = Column(Numeric(10, 2), nullable=False, server_default="0")
+    interest_amount = Column(Numeric(10, 2), nullable=False, server_default="0")
     total_amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String(20), default="pendente", index=True)
     payment_method = Column(String(20), nullable=True)

@@ -75,11 +75,19 @@ class ContractRepository:
             .all()
         )
 
-    def create(self, data: ContractCreateInternal) -> Contract:
+    def create(self, data: ContractCreateInternal, commit: bool = True) -> Contract:
+        """
+        `commit=False` quando a rota precisa gravar contrato e imóvel na MESMA
+        transação — do contrário uma falha entre os dois commits deixa um
+        contrato ativo com o imóvel marcado como vago.
+        """
         contract = Contract(**data.dict())
         self.db.add(contract)
-        self.db.commit()
-        self.db.refresh(contract)
+        if commit:
+            self.db.commit()
+            self.db.refresh(contract)
+        else:
+            self.db.flush()
         return contract
 
     def update(self, contract_id: int, user_id: int, data: ContractUpdate) -> Optional[Contract]:
@@ -93,13 +101,18 @@ class ContractRepository:
         self.db.refresh(contract)
         return contract
 
-    def update_status(self, contract_id: int, user_id: int, new_status: str) -> Optional[Contract]:
+    def update_status(
+        self, contract_id: int, user_id: int, new_status: str, commit: bool = True
+    ) -> Optional[Contract]:
         contract = self.get_by_id_and_user(contract_id, user_id)
         if not contract:
             return None
         contract.status = new_status
-        self.db.commit()
-        self.db.refresh(contract)
+        if commit:
+            self.db.commit()
+            self.db.refresh(contract)
+        else:
+            self.db.flush()
         return contract
 
     def renew(self, contract_id: int, user_id: int, new_end_date: date, new_rent: Optional[float] = None) -> Optional[Contract]:
@@ -114,10 +127,13 @@ class ContractRepository:
         self.db.refresh(contract)
         return contract
 
-    def delete(self, contract_id: int, user_id: int) -> bool:
+    def delete(self, contract_id: int, user_id: int, commit: bool = True) -> bool:
         contract = self.get_by_id_and_user(contract_id, user_id)
         if not contract:
             return False
         self.db.delete(contract)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return True

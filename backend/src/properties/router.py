@@ -3,7 +3,7 @@ Router para o módulo de propriedades
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from src.database import get_db
@@ -237,7 +237,10 @@ async def upload_property_images(
 @router.delete("/{property_id}/images/{image_index}")
 async def delete_property_image(
     property_id: int,
-    image_index: int,
+    # `ge=0`: só o limite superior era checado, então índice negativo passava
+    # e `images[-1]` apagava a ÚLTIMA imagem, não a pedida — incluindo o
+    # arquivo no storage.
+    image_index: int = Path(..., ge=0),
     user_id: int = Depends(get_current_user_local_id),
     repository: PropertyRepository = Depends(get_property_repository),
     storage_service: SupabaseStorageService = Depends(get_storage_service),

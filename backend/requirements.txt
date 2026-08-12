@@ -32,6 +32,9 @@ python-dateutil==2.8.2
 # Agendamento de tarefas
 apscheduler==3.10.4
 
+# Rate limiting das rotas de autenticação
+slowapi==0.1.9
+
 # Supabase Storage (para produção)
 # supabase==2.0.0 - já incluído acima na versão 2.8.0
 

@@ -28,6 +28,10 @@ class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=1, description="Refresh token do Supabase")
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "Bearer"

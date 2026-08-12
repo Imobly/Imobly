@@ -218,6 +218,21 @@ DATABASE_URL_PROD=postgresql://postgres.yyeldattafklyutbbnhu:[SUA_SENHA]@aws-0-u
 - ✅ Suporta muito mais conexões simultâneas
 - ✅ Ideal para ambientes de produção com múltiplas instâncias
 
+### Rate limiting
+
+`/auth/login`, `/auth/register`, `/auth/change-password` e `/auth/refresh` são
+limitados por IP **e** por identificador — só por IP, um atacante com IP
+rotativo escapa; só por identificador, dá para varrer contas diferentes.
+
+```env
+# Estado em memória por padrão. Com MAIS DE UMA réplica, cada uma terá seu
+# próprio contador (N réplicas = N× o limite): aponte para um Redis.
+RATE_LIMIT_STORAGE_URI=redis://host:6379
+
+# Só desative em teste — a suíte dispara muitas requisições de propósito.
+RATE_LIMIT_ENABLED=true
+```
+
 ---
 
 ## 🗃️ Migrations (Alembic)

@@ -7,6 +7,8 @@ from fastapi import UploadFile, HTTPException, status
 from supabase import Client
 import logging
 import os
+import re
+import uuid
 from datetime import datetime
 import mimetypes
 
@@ -17,65 +19,136 @@ class SupabaseStorageService:
     """Serviço para upload e gerenciamento de arquivos no Supabase Storage"""
     
     BUCKET_NAME = "users"
+    # `.svg` foi REMOVIDO das imagens: SVG é um documento XML que pode conter
+    # <script>, e servido do domínio público do Supabase vira XSS armazenado.
     ALLOWED_EXTENSIONS = {
-        'images': {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'},
+        'images': {'.jpg', '.jpeg', '.png', '.gif', '.webp'},
         'documents': {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt'},
-        'all': {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt'}
+        'all': {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx',
+                '.xls', '.xlsx', '.txt'}
     }
+
+    # Assinaturas (magic bytes) dos formatos cujo conteúdo dá para verificar.
+    # A extensão é escolhida por quem envia, então sozinha não prova nada:
+    # um executável renomeado para .png passava direto.
+    _ASSINATURAS = {
+        b"\xff\xd8\xff": "image/jpeg",
+        b"\x89PNG\r\n\x1a\n": "image/png",
+        b"GIF87a": "image/gif",
+        b"GIF89a": "image/gif",
+        b"%PDF-": "application/pdf",
+    }
+    _TAMANHO_CABECALHO = 12
+
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-    
+
+    # Só letras, números, ponto, hífen e underscore sobrevivem no nome final.
+    _CARACTERES_INSEGUROS = re.compile(r"[^A-Za-z0-9._-]")
+
     def __init__(self, supabase_client: Client):
         self.supabase = supabase_client
         self.storage = supabase_client.storage
-    
+
     def _validate_file(self, file: UploadFile, allowed_types: str = 'all') -> None:
         """
-        Valida arquivo antes do upload
-        
-        Args:
-            file: Arquivo para validação
-            allowed_types: Tipo de arquivos permitidos ('images', 'documents', 'all')
-            
+        Valida extensão, tamanho e — para os formatos conhecidos — o CONTEÚDO.
+
         Raises:
             HTTPException: Se arquivo inválido
         """
-        # Verifica extensão
         file_ext = os.path.splitext(file.filename or '')[1].lower()
         allowed_exts = self.ALLOWED_EXTENSIONS.get(allowed_types, self.ALLOWED_EXTENSIONS['all'])
-        
+
         if file_ext not in allowed_exts:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tipo de arquivo não permitido. Extensões aceitas: {', '.join(allowed_exts)}"
+                detail=f"Tipo de arquivo não permitido. Extensões aceitas: {', '.join(sorted(allowed_exts))}"
             )
-        
+
         # Verifica tamanho (se possível)
         if hasattr(file.file, 'seek') and hasattr(file.file, 'tell'):
             file.file.seek(0, 2)  # Move para o final
             file_size = file.file.tell()
             file.file.seek(0)  # Volta para o início
-            
+
+            if file_size == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Arquivo vazio."
+                )
+
             if file_size > self.MAX_FILE_SIZE:
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail=f"Arquivo muito grande. Tamanho máximo: {self.MAX_FILE_SIZE / (1024*1024):.1f}MB"
                 )
-    
+
+        self._validar_conteudo(file, file_ext)
+
+    def _validar_conteudo(self, file: UploadFile, extensao: str) -> None:
+        """
+        Confere que os primeiros bytes correspondem à extensão declarada.
+
+        Formatos sem assinatura estável (.txt, .doc, .xls) passam — para eles a
+        verificação seria heurística e daria falso negativo em arquivo legítimo.
+        Os formatos que importam para XSS/execução (imagens e PDF) são checados.
+        """
+        if not hasattr(file.file, "read"):
+            return
+
+        cabecalho = file.file.read(self._TAMANHO_CABECALHO)
+        file.file.seek(0)
+        if not cabecalho:
+            return
+
+        detectado = next(
+            (mime for assinatura, mime in self._ASSINATURAS.items()
+             if cabecalho.startswith(assinatura)),
+            None,
+        )
+
+        esperados = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+            ".gif": "image/gif", ".pdf": "application/pdf",
+        }
+        esperado = esperados.get(extensao)
+        if esperado is None:
+            return  # extensão sem assinatura verificável
+
+        if detectado != esperado:
+            logger.warning(
+                "Conteúdo incompatível com a extensão: %s declarava %s, detectado %s",
+                file.filename, esperado, detectado or "desconhecido",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="O conteúdo do arquivo não corresponde à extensão informada.",
+            )
+
+    def _sanitizar_nome(self, filename: str) -> str:
+        """
+        Reduz o nome a um componente seguro.
+
+        `os.path.basename` neutraliza `../` e caminhos absolutos: antes o nome
+        só trocava espaço por underscore, então um nome malicioso conseguia
+        escrever fora do prefixo `{user_id}/` — cruzando a fronteira entre
+        clientes no storage.
+        """
+        base = os.path.basename(filename or "arquivo")
+        seguro = self._CARACTERES_INSEGUROS.sub("_", base).lstrip(".")
+        return (seguro or "arquivo")[:100]
+
     def _generate_file_path(self, user_id: int, category: str, filename: str) -> str:
         """
-        Gera caminho único para o arquivo no storage
-        
-        Args:
-            user_id: ID do usuário
-            category: Categoria do arquivo (properties, expenses, tenants)
-            filename: Nome original do arquivo
-            
-        Returns:
-            str: Caminho completo no formato users/{user_id}/{category}/{timestamp}_{filename}
+        Gera caminho único no formato {user_id}/{category}/{timestamp}_{nome}.
+
+        O sufixo aleatório evita colisão entre uploads no mesmo segundo — o
+        timestamp sozinho fazia dois arquivos simultâneos se sobrescreverem
+        (o upload usa upsert=true).
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_filename = filename.replace(' ', '_')
-        return f"{user_id}/{category}/{timestamp}_{safe_filename}"
+        sufixo = uuid.uuid4().hex[:8]
+        return f"{user_id}/{category}/{timestamp}_{sufixo}_{self._sanitizar_nome(filename)}"
     
     async def upload_file(
         self,
@@ -108,12 +181,16 @@ class SupabaseStorageService:
             
             # Lê conteúdo do arquivo
             file_content = await file.read()
-            
-            # Detecta content type
-            content_type = file.content_type
-            if not content_type:
-                content_type = mimetypes.guess_type(file.filename or '')[0] or 'application/octet-stream'
-            
+
+            # Content-type derivado da EXTENSÃO já validada, não do cabeçalho
+            # enviado pelo cliente: o valor do cliente é arbitrário e é ele que
+            # o navegador respeita ao servir o arquivo — `text/html` num
+            # arquivo público vira XSS armazenado.
+            extensao = os.path.splitext(file.filename or "")[1].lower()
+            content_type = (
+                mimetypes.guess_type(f"x{extensao}")[0] or "application/octet-stream"
+            )
+
             # Faz upload
             response = self.storage.from_(self.BUCKET_NAME).upload(
                 path=file_path,
@@ -140,10 +217,12 @@ class SupabaseStorageService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Erro ao fazer upload: {str(e)}")
+            # Registra o detalhe no log, mas não o devolve ao cliente: a
+            # mensagem do storage pode expor nome de bucket e caminho interno.
+            logger.exception("Erro ao fazer upload de %s", file.filename)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Erro ao fazer upload do arquivo: {str(e)}"
+                detail="Não foi possível enviar o arquivo. Tente novamente."
             )
     
     async def upload_multiple_files(
@@ -164,17 +243,32 @@ class SupabaseStorageService:
             
         Returns:
             Lista de dicts com path e public_url
+
+        Raises:
+            HTTPException 400: se algum arquivo for rejeitado.
+
+        Antes as falhas eram engolidas e a resposta era 200 "enviados com
+        sucesso" listando só os que passaram — quem enviou 5 imagens e teve 2
+        rejeitadas não era informado. Falhar por inteiro deixa o resultado
+        previsível: ou tudo entrou, ou o cliente sabe o que corrigir.
         """
         results = []
-        
+        rejeitados = []
+
         for file in files:
             try:
                 result = await self.upload_file(file, user_id, category, allowed_types)
                 results.append(result)
             except HTTPException as e:
-                logger.warning(f"Erro ao fazer upload de {file.filename}: {e.detail}")
-                # Continua com os próximos arquivos
-        
+                logger.warning("Upload rejeitado (%s): %s", file.filename, e.detail)
+                rejeitados.append(f"{file.filename}: {e.detail}")
+
+        if rejeitados:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nenhum arquivo foi enviado. " + " | ".join(rejeitados),
+            )
+
         return results
     
     async def delete_file(self, file_path: str) -> bool:

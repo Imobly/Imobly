@@ -210,6 +210,37 @@ class AuthRepository:
                 detail="Não foi possível registrar o usuário. Verifique os dados ou tente outro email."
             )
     
+    async def refresh_session(self, refresh_token: str) -> Dict[str, Any]:
+        """
+        Troca o refresh token por um novo par de tokens no Supabase.
+
+        Sem isso o usuário era deslogado toda vez que o access token expirava
+        (1h por padrão) — no meio do trabalho, perdendo formulários abertos.
+
+        Raises:
+            HTTPException 401: refresh token inválido, expirado ou já usado.
+        """
+        try:
+            response = self.supabase.auth.refresh_session(refresh_token)
+            if not response or not response.session:
+                raise ValueError("sessão não retornada")
+        except HTTPException:
+            raise
+        except Exception as e:
+            # Não distinga "expirado" de "inválido": a diferença só serve para
+            # quem está sondando tokens.
+            logger.info(f"Falha ao renovar sessão: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sessão expirada. Faça login novamente.",
+            )
+
+        return {
+            "access_token": response.session.access_token,
+            "refresh_token": response.session.refresh_token,
+            "token_type": "Bearer",
+        }
+
     async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
         Busca usuário por ID

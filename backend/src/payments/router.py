@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from src.database import get_db
 from src.security import get_current_user_local_id
 from src.core.ownership import assert_owned, assert_owned_optional
+from .calculo import calcular_pagamento
 from .repository import PaymentRepository
 from .schema import (
     PaymentCreate,
@@ -73,43 +74,25 @@ def calculate_payment(
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
 
-    rent = float(contract.rent)
-    fine_rate = float(contract.fine_rate or 0)
-    interest_rate = float(contract.interest_rate or 0)
-
-    payment_dt = data.payment_date or date.today()
-    days_overdue = max(0, (payment_dt - data.due_date).days)
-
-    fine_amount = 0.0
-    interest_amount = 0.0
-    if days_overdue > 0:
-        fine_amount = rent * fine_rate / 100
-        interest_amount = rent * (interest_rate / 100) * (days_overdue / 30)
-
-    total_addition = fine_amount + interest_amount
-    total_expected = rent + total_addition
-    paid = float(data.paid_amount or 0)
-    remaining = max(0.0, total_expected - paid)
-
-    if paid >= total_expected and paid > 0:
-        calc_status = "pago"
-    elif paid > 0:
-        calc_status = "parcial"
-    elif days_overdue > 0:
-        calc_status = "atrasado"
-    else:
-        calc_status = "pendente"
+    calc = calcular_pagamento(
+        aluguel=contract.rent,
+        taxa_multa=contract.fine_rate,
+        taxa_juros=contract.interest_rate,
+        vencimento=data.due_date,
+        data_pagamento=data.payment_date,
+        valor_pago=data.paid_amount,
+    )
 
     return {
-        "base_amount": round(rent, 2),
-        "fine_amount": round(fine_amount, 2),
-        "interest_amount": round(interest_amount, 2),
-        "total_addition": round(total_addition, 2),
-        "total_expected": round(total_expected, 2),
-        "days_overdue": days_overdue,
-        "status": calc_status,
-        "paid_amount": round(paid, 2),
-        "remaining_amount": round(remaining, 2),
+        "base_amount": calc.base,
+        "fine_amount": calc.multa,
+        "interest_amount": calc.juros,
+        "total_addition": calc.acrescimo,
+        "total_expected": calc.total_devido,
+        "days_overdue": calc.dias_atraso,
+        "status": calc.situacao,
+        "paid_amount": calc.pago,
+        "remaining_amount": calc.restante,
     }
 
 
@@ -129,28 +112,14 @@ def register_payment(
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
 
-    rent = float(contract.rent)
-    fine_rate = float(contract.fine_rate or 0)
-    interest_rate = float(contract.interest_rate or 0)
-    paid = float(data.paid_amount)
-
-    days_overdue = max(0, (data.payment_date - data.due_date).days)
-    fine_amount = 0.0
-    interest_amount = 0.0
-    if days_overdue > 0:
-        fine_amount = rent * fine_rate / 100
-        interest_amount = rent * (interest_rate / 100) * (days_overdue / 30)
-
-    total_expected = rent + fine_amount + interest_amount
-
-    if paid >= total_expected and paid > 0:
-        pay_status = "pago"
-    elif paid > 0:
-        pay_status = "parcial"
-    elif days_overdue > 0:
-        pay_status = "atrasado"
-    else:
-        pay_status = "pendente"
+    calc = calcular_pagamento(
+        aluguel=contract.rent,
+        taxa_multa=contract.fine_rate,
+        taxa_juros=contract.interest_rate,
+        vencimento=data.due_date,
+        data_pagamento=data.payment_date,
+        valor_pago=data.paid_amount,
+    )
 
     # Quando informados explicitamente, property_id/tenant_id são do cliente e
     # precisam ser validados. Quando omitidos, herdam do contrato — que já foi
@@ -171,10 +140,13 @@ def register_payment(
         contract_id=data.contract_id,
         due_date=data.due_date,
         payment_date=data.payment_date,
-        amount=Decimal(str(round(rent, 2))),
-        fine_amount=Decimal(str(round(fine_amount + interest_amount, 2))),
-        total_amount=Decimal(str(round(paid, 2))),
-        status=pay_status,
+        amount=calc.base,
+        # Multa e juros em colunas separadas: somados num campo só, a
+        # composição da cobrança ficava impossível de auditar.
+        fine_amount=calc.multa,
+        interest_amount=calc.juros,
+        total_amount=calc.pago,
+        status=calc.situacao,
         payment_method=data.payment_method,
         description=data.description,
     )
@@ -196,19 +168,47 @@ def get_overdue_payments(
 def bulk_confirm_payments(
     data: BulkConfirmRequest,
     user_id: int = Depends(get_current_user_local_id),
+    db: Session = Depends(get_db),
     repository: PaymentRepository = Depends(get_payment_repository),
 ):
-    """Confirmar múltiplos pagamentos"""
+    """
+    Confirmar múltiplos pagamentos — tudo ou nada.
+
+    Antes era um commit por item dentro do laço: uma falha no meio deixava o
+    lote parcialmente aplicado e a resposta era 200, omitindo silenciosamente
+    o que não foi confirmado. Agora é uma transação só, e ids inexistentes (ou
+    de outro usuário) fazem a operação inteira falhar com 404 em vez de serem
+    ignorados sem aviso.
+    """
     payment_date = data.payment_date or date.today()
 
-    confirmed = []
-    for pid in data.payment_ids:
-        updated = repository.update(
-            pid, user_id,
-            PaymentUpdate(payment_date=payment_date, status="pago")
-        )
-        if updated:
-            confirmed.append(updated)
+    try:
+        confirmed = []
+        nao_encontrados = []
+        for pid in data.payment_ids:
+            updated = repository.update(
+                pid, user_id,
+                PaymentUpdate(payment_date=payment_date, status="pago"),
+                commit=False,
+            )
+            if updated:
+                confirmed.append(updated)
+            else:
+                nao_encontrados.append(pid)
+
+        if nao_encontrados:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pagamentos não encontrados: {nao_encontrados}",
+            )
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    for pagamento in confirmed:
+        db.refresh(pagamento)
     return confirmed
 
 

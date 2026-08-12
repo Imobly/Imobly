@@ -43,6 +43,11 @@ export async function login(credentials: LoginRequest): Promise<User> {
 
   if (typeof window !== 'undefined') {
     localStorage.setItem('access_token', tokenData.access_token)
+    // O refresh token era descartado, então a sessão morria junto com o
+    // access token (~1h) e o usuário caía no /login no meio do trabalho.
+    if (tokenData.refresh_token) {
+      localStorage.setItem('refresh_token', tokenData.refresh_token)
+    }
   }
 
   // Busca o perfil do usuário (token já é injetado pelo interceptor do apiClient)
@@ -103,6 +108,7 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function logout(): Promise<void> {
   if (typeof window === 'undefined') return
   localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
   localStorage.removeItem('user')
 }
 

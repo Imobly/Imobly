@@ -22,7 +22,14 @@ class PaymentBase(BaseModel):
     payment_date: Optional[date] = None
     amount: Decimal = Field(..., gt=0)
     fine_amount: Decimal = Field(0, ge=0)
-    total_amount: Decimal = Field(..., gt=0)
+    # Juros separados da multa: somados num campo só, a composição da cobrança
+    # ficava impossível de auditar.
+    interest_amount: Decimal = Field(0, ge=0)
+    # `ge=0`, não `gt=0`: registrar uma cobrança em aberto (valor pago zero) é
+    # caso de uso legítimo — e era, aliás, o único caminho capaz de produzir o
+    # status "atrasado" que o próprio cálculo gera. Com `gt=0` a validação
+    # falhava DENTRO do handler e virava 500 em vez de 201.
+    total_amount: Decimal = Field(..., ge=0)
     status: str = Field(..., pattern="^(pendente|pago|atrasado|parcial)$")
     payment_method: Optional[str] = Field(None, pattern=_PAYMENT_METHOD_PATTERN)
     description: Optional[str] = None
@@ -41,7 +48,8 @@ class PaymentUpdate(BaseModel):
     payment_date: Optional[date] = None
     amount: Optional[Decimal] = Field(None, gt=0)
     fine_amount: Optional[Decimal] = Field(None, ge=0)
-    total_amount: Optional[Decimal] = Field(None, gt=0)
+    interest_amount: Optional[Decimal] = Field(None, ge=0)
+    total_amount: Optional[Decimal] = Field(None, ge=0)
     status: Optional[str] = Field(None, pattern="^(pendente|pago|atrasado|parcial)$")
     payment_method: Optional[str] = Field(None, pattern=_PAYMENT_METHOD_PATTERN)
     description: Optional[str] = None

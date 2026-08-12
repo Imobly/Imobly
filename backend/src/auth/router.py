@@ -2,18 +2,25 @@
 Endpoints de autenticação
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, Request, status, Depends
 from sqlalchemy.orm import Session
 from supabase import Client
 import logging
 
+from src.core.rate_limit import (
+    LIMITE_LOGIN,
+    LIMITE_REGISTRO,
+    LIMITE_TROCA_SENHA,
+    limiter,
+)
 from src.database import get_db
 from src.security import get_supabase_client, get_current_user
 from src.auth.repository import AuthRepository
 from src.auth.schema import (
-    LoginRequest, 
-    RegisterRequest, 
-    TokenResponse, 
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
     UserResponse,
     ChangePasswordRequest,
     UpdateUserRequest
@@ -33,17 +40,23 @@ def get_auth_repository(
 
 
 @router.post("/login", response_model=TokenResponse, summary="Login do usuário")
+@limiter.limit(LIMITE_LOGIN)
 async def login(
+    request: Request,
     credentials: LoginRequest,
     auth_repo: AuthRepository = Depends(get_auth_repository)
 ):
     """
     Autentica usuário via Supabase Auth
-    
+
     Aceita email ou username como identificador
     """
     email_or_username = credentials.username
-    
+
+    # Compõe a chave do rate limit com o identificador, não só o IP: sem isso
+    # um atacante atrás de IP rotativo varre contas sem esbarrar no limite.
+    request.state.rate_limit_identity = email_or_username.lower()
+
     # Se não contém @, é username - buscar email na tabela local
     if '@' not in email_or_username:
         email = auth_repo.get_email_by_username(email_or_username)
@@ -67,13 +80,16 @@ async def login(
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED, summary="Registrar novo usuário")
+@limiter.limit(LIMITE_REGISTRO)
 async def register(
+    request: Request,
     user_data: RegisterRequest,
     auth_repo: AuthRepository = Depends(get_auth_repository)
 ):
     """
     Registra um novo usuário no Supabase
     """
+    request.state.rate_limit_identity = user_data.email.lower()
     result = await auth_repo.create_user(
         email=user_data.email,
         password=user_data.password,
@@ -171,14 +187,20 @@ async def update_current_user_profile(
 
 
 @router.post("/change-password", summary="Alterar senha")
+@limiter.limit(LIMITE_TROCA_SENHA)
 async def change_password(
+    request: Request,
     password_data: ChangePasswordRequest,
     current_user: dict = Depends(get_current_user),
     auth_repo: AuthRepository = Depends(get_auth_repository)
 ):
     """
     Altera a senha do usuário autenticado, validando a senha atual.
+
+    A rota reautentica para validar a senha atual, o que a torna um oráculo
+    de senha — daí o limite, apesar de já exigir token válido.
     """
+    request.state.rate_limit_identity = current_user["id"]
     await auth_repo.change_password(
         supabase_user_id=current_user["id"],
         email=current_user["email"],
@@ -197,12 +219,23 @@ async def logout():
     return {"message": "Logout realizado com sucesso"}
 
 
-@router.post("/refresh", summary="Renovar token")
-async def refresh_token():
+@router.post("/refresh", response_model=TokenResponse, summary="Renovar token")
+@limiter.limit(LIMITE_LOGIN)
+async def refresh_token(
+    request: Request,
+    data: RefreshRequest,
+    auth_repo: AuthRepository = Depends(get_auth_repository),
+):
     """
-    Renova o token de acesso (implementação futura)
+    Renova o par de tokens a partir do refresh token.
+
+    O access token do Supabase expira em ~1h. Sem esta rota, o frontend
+    derrubava o usuário para /login no meio do trabalho.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Renovação de token não implementada"
+    result = await auth_repo.refresh_session(data.refresh_token)
+
+    return TokenResponse(
+        access_token=result["access_token"],
+        token_type=result["token_type"],
+        refresh_token=result.get("refresh_token"),
     )

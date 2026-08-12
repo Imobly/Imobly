@@ -69,11 +69,20 @@ class TestAuth:
         response = client.post("/api/v1/auth/logout", headers=auth_headers)
         assert response.status_code == 200
 
-    def test_refresh_token(self, client: TestClient, auth_headers):
-        """Teste de refresh de token"""
-        response = client.post("/api/v1/auth/refresh", headers=auth_headers)
-        # Por enquanto retorna 501 (not implemented)
-        assert response.status_code == 501
+    def test_refresh_exige_refresh_token_no_corpo(self, client: TestClient):
+        """A rota deixou de ser 501: agora renova a sessão de verdade."""
+        response = client.post("/api/v1/auth/refresh", json={})
+        assert response.status_code == 422
+
+    def test_refresh_com_token_invalido_devolve_401(self, client: TestClient):
+        """
+        Mensagem genérica de propósito: distinguir "expirado" de "inválido" só
+        ajudaria quem está sondando tokens.
+        """
+        response = client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": "token-invalido"}
+        )
+        assert response.status_code == 401
 
     def test_register_duplicate_email(self, client: TestClient):
         """Teste de registro com email duplicado"""

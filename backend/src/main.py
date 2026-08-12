@@ -6,7 +6,11 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from src.config import settings
+from src.core.rate_limit import limiter
 from src.scheduler import start_scheduler, shutdown_scheduler
 
 # Importar routers de todos os módulos
@@ -50,6 +54,30 @@ app = FastAPI(
     redirect_slashes=False,
     lifespan=lifespan,
 )
+
+# ── Rate limiting ──
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """
+    429 com `Retry-After`, sem revelar quantas tentativas restam nem se a
+    conta existe — a resposta é idêntica para usuário válido e inválido.
+    """
+    logger.warning(
+        "Rate limit atingido em %s %s (origem %s)",
+        request.method,
+        request.url.path,
+        request.client.host if request.client else "desconhecida",
+    )
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": "Muitas tentativas. Aguarde e tente novamente."},
+        headers={"Retry-After": "60"},
+    )
+
 
 # Configuração CORS para comunicação com frontend
 app.add_middleware(

@@ -47,8 +47,16 @@ class PaymentRepository:
         self.db.refresh(db_payment)
         return db_payment
 
-    def update(self, payment_id: int, user_id: int, update_data: PaymentUpdate) -> Optional[Payment]:
-        """Atualizar pagamento"""
+    def update(
+        self, payment_id: int, user_id: int, update_data: PaymentUpdate, commit: bool = True
+    ) -> Optional[Payment]:
+        """
+        Atualizar pagamento.
+
+        `commit=False` permite que a confirmação em lote seja uma transação só:
+        antes era um commit por pagamento, e uma falha no meio deixava o lote
+        parcialmente aplicado — respondendo 200 e omitindo o que falhou.
+        """
         db_payment = self.get_by_id_and_user(payment_id, user_id)
         if not db_payment:
             return None
@@ -56,8 +64,11 @@ class PaymentRepository:
         for field, value in update_data.dict(exclude_unset=True).items():
             setattr(db_payment, field, value)
 
-        self.db.commit()
-        self.db.refresh(db_payment)
+        if commit:
+            self.db.commit()
+            self.db.refresh(db_payment)
+        else:
+            self.db.flush()
         return db_payment
 
     def delete(self, payment_id: int, user_id: int) -> bool:

@@ -60,24 +60,38 @@ class ApiClient {
         }
         return response
       },
-      (error) => {
-        // Log de erro
-        console.error('❌ [API Error]', error)
-        
+      async (error) => {
+        // Log de erro (só em desenvolvimento — o objeto inclui headers da
+        // requisição, entre eles o Authorization)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('❌ [API Error]', error)
+        }
+
         // Tratamento de erros customizado
         if (error.response) {
-          // Se for 401 (não autorizado), limpa o token e redireciona para login
-          if (error.response.status === 401) {
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('access_token')
-              localStorage.removeItem('user')
-              // Só redireciona se não estiver na página de login
-              if (!window.location.pathname.includes('/login')) {
-                window.location.href = '/login'
+          // 401: tenta renovar a sessão UMA vez antes de derrubar o usuário.
+          // Antes o 401 deslogava direto, então toda expiração de token (~1h)
+          // interrompia o trabalho em andamento.
+          if (error.response.status === 401 && typeof window !== 'undefined') {
+            const original = error.config
+            const ehRotaDeAuth = original?.url?.includes('/auth/login')
+              || original?.url?.includes('/auth/refresh')
+
+            if (!original?._jaTentouRenovar && !ehRotaDeAuth) {
+              original._jaTentouRenovar = true
+              try {
+                const novoToken = await this.renovarSessao()
+                original.headers['Authorization'] = `Bearer ${novoToken}`
+                return this.client.request(original)
+              } catch {
+                // Renovação falhou — segue para o logout abaixo.
               }
             }
+
+            this.encerrarSessao()
           }
-          
+
+
           // Erro com resposta do servidor
           const apiError: ApiError = {
             detail: error.response.data?.detail || 'Erro interno do servidor'
@@ -98,6 +112,53 @@ class ApiClient {
         }
       }
     )
+  }
+
+  /**
+   * Renova o par de tokens. Chamadas concorrentes compartilham a MESMA
+   * promessa: sem isso, várias requisições falhando em paralelo (o dashboard
+   * dispara muitas) disparariam vários refresh, e o Supabase invalida o
+   * refresh token a cada uso — as renovações seguintes falhariam e o usuário
+   * seria deslogado justamente por ter várias abas/requisições abertas.
+   */
+  private renovacaoEmAndamento: Promise<string> | null = null
+
+  private renovarSessao(): Promise<string> {
+    if (this.renovacaoEmAndamento) return this.renovacaoEmAndamento
+
+    this.renovacaoEmAndamento = (async () => {
+      const refreshToken = localStorage.getItem('refresh_token')
+      if (!refreshToken) throw new Error('sem refresh token')
+
+      // Instância limpa: o interceptor desta classe não deve recursar aqui.
+      const resposta = await axios.post(
+        `${getBaseURL()}/auth/refresh`,
+        { refresh_token: refreshToken },
+        { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
+      )
+
+      const { access_token, refresh_token } = resposta.data
+      if (!access_token) throw new Error('resposta de refresh inválida')
+
+      localStorage.setItem('access_token', access_token)
+      if (refresh_token) localStorage.setItem('refresh_token', refresh_token)
+      return access_token as string
+    })()
+
+    this.renovacaoEmAndamento.finally(() => {
+      this.renovacaoEmAndamento = null
+    })
+
+    return this.renovacaoEmAndamento
+  }
+
+  private encerrarSessao(): void {
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+    localStorage.removeItem('user')
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login'
+    }
   }
 
   // Métodos HTTP

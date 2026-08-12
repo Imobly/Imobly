@@ -58,13 +58,26 @@ def db_engine():
 
 @pytest.fixture
 def db_session(db_engine):
-    """Sessão de banco para cada teste"""
+    """
+    Sessão de banco isolada por teste, com os dados descartados ao final.
+
+    `join_transaction_mode="create_savepoint"` faz commit/rollback da sessão
+    operarem sobre um SAVEPOINT em vez da transação externa. Sem isso, uma rota
+    que chama `rollback()` — como as que passaram a controlar a transação
+    explicitamente — apagaria também os dados criados pelas fixtures, e o teste
+    mediria um artefato do harness em vez do comportamento real (em produção
+    cada requisição tem sua própria sessão, e o rollback só desfaz o trabalho
+    daquela requisição).
+    """
     connection = db_engine.connect()
     transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection)
-    
+    session = TestingSessionLocal(
+        bind=connection,
+        join_transaction_mode="create_savepoint",
+    )
+
     yield session
-    
+
     session.close()
     transaction.rollback()
     connection.close()

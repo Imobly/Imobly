@@ -91,15 +91,23 @@ def create_contract(
         **contract_data.dict(),
         user_id=user_id,
     )
-    new_contract = repo.create(internal)
 
-    # Auto-atualizar status do imóvel para 'occupied'
-    if new_contract.status == "ativo":
-        prop = assert_owned(db, Property, new_contract.property_id, user_id)
-        prop.status = "occupied"
-        prop.tenant_id = new_contract.tenant_id
+    # Contrato e imóvel numa transação só: eram dois commits separados, e uma
+    # falha entre eles deixava contrato ativo com o imóvel ainda 'vacant'.
+    try:
+        new_contract = repo.create(internal, commit=False)
+
+        if new_contract.status == "ativo":
+            prop = assert_owned(db, Property, new_contract.property_id, user_id)
+            prop.status = "occupied"
+            prop.tenant_id = new_contract.tenant_id
+
         db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
+    db.refresh(new_contract)
     return new_contract
 
 
@@ -154,22 +162,32 @@ def update_contract_status(
     repo: ContractRepository = Depends(get_contract_repository),
     db: Session = Depends(get_db),
 ):
-    updated = repo.update_status(contract_id, user_id, new_status)
-    if not updated:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
-
-    # Auto-atualizar status do imóvel — filtrando por dono (era escrita
-    # cross-tenant: o imóvel era buscado só por id).
     from src.properties.models import Property
-    prop = assert_owned(db, Property, updated.property_id, user_id)
-    if new_status == "ativo":
-        prop.status = "occupied"
-        prop.tenant_id = updated.tenant_id
-    elif new_status in ("inativo", "expirado"):
-        prop.status = "vacant"
-        prop.tenant_id = None
-    db.commit()
 
+    # Contrato e imóvel na MESMA transação (antes eram dois commits).
+    try:
+        updated = repo.update_status(contract_id, user_id, new_status, commit=False)
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado"
+            )
+
+        # Filtrando por dono — era escrita cross-tenant: o imóvel era buscado
+        # só por id.
+        prop = assert_owned(db, Property, updated.property_id, user_id)
+        if new_status == "ativo":
+            prop.status = "occupied"
+            prop.tenant_id = updated.tenant_id
+        elif new_status in ("inativo", "expirado"):
+            prop.status = "vacant"
+            prop.tenant_id = None
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(updated)
     return updated
 
 
@@ -206,14 +224,21 @@ def delete_contract(
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
 
-    # Liberar imóvel — filtrando por dono (era escrita cross-tenant).
-    if contract.status == "ativo":
-        prop = assert_owned(db, Property, contract.property_id, user_id)
-        prop.status = "vacant"
-        prop.tenant_id = None
+    try:
+        # Liberar imóvel — filtrando por dono (era escrita cross-tenant).
+        if contract.status == "ativo":
+            prop = assert_owned(db, Property, contract.property_id, user_id)
+            prop.status = "vacant"
+            prop.tenant_id = None
 
-    deleted = repo.delete(contract_id, user_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado")
-    db.commit()
+        deleted = repo.delete(contract_id, user_id, commit=False)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Contrato não encontrado"
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     return {"message": "Contrato deletado com sucesso"}
