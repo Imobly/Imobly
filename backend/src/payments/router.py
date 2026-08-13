@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from src.database import get_db
 from src.security import get_current_user_local_id
 from src.core.ownership import assert_owned, assert_owned_optional
+from src.core.tempo import hoje_brt
 from .calculo import calcular_pagamento
 from .repository import PaymentRepository
 from .schema import (
@@ -38,21 +39,27 @@ def get_payments(
     status: Optional[str] = Query(None, description="Filtrar por status"),
     property_id: Optional[int] = Query(None, description="Filtrar por propriedade"),
     tenant_id: Optional[int] = Query(None, description="Filtrar por inquilino"),
+    contract_id: Optional[int] = Query(None, description="Filtrar por contrato"),
     user_id: int = Depends(get_current_user_local_id),
     repository: PaymentRepository = Depends(get_payment_repository),
 ):
-    """Listar pagamentos com filtros opcionais"""
+    """
+    Listar pagamentos com filtros COMBINÁVEIS.
 
-    if property_id:
-        payments = repository.get_by_property(user_id, property_id)
-    elif tenant_id:
-        payments = repository.get_by_tenant(user_id, tenant_id)
-    elif status:
-        payments = repository.get_by_status(user_id, status)
-    else:
-        payments = repository.get_by_user(user_id, skip, limit)
-    
-    return payments
+    Antes os filtros eram encadeados com if/elif: pedir
+    `?property_id=1&status=atrasado` devolvia todos os pagamentos do imóvel e
+    descartava o status sem avisar — o usuário via a lista errada e acreditava
+    nela. E os ramos de filtro ignoravam skip/limit.
+    """
+    return repository.search(
+        user_id=user_id,
+        skip=skip,
+        limit=limit,
+        status=status,
+        property_id=property_id,
+        tenant_id=tenant_id,
+        contract_id=contract_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +187,7 @@ def bulk_confirm_payments(
     de outro usuário) fazem a operação inteira falhar com 404 em vez de serem
     ignorados sem aviso.
     """
-    payment_date = data.payment_date or date.today()
+    payment_date = data.payment_date or hoje_brt()
 
     try:
         confirmed = []
@@ -230,7 +237,7 @@ def create_payment(
     assert_owned(db, Contract, payment_data.contract_id, user_id)
 
     payment_create_internal = PaymentCreateInternal(
-        **payment_data.dict(exclude={'user_id'}),
+        **payment_data.model_dump(exclude={'user_id'}),
         user_id=user_id
     )
 
@@ -299,7 +306,7 @@ def confirm_payment(
     """Marcar pagamento como pago"""
     updated = repository.update(
         payment_id, user_id,
-        PaymentUpdate(payment_date=date.today(), status="pago"),
+        PaymentUpdate(payment_date=hoje_brt(), status="pago"),
     )
     if not updated:
         raise HTTPException(

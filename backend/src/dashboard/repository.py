@@ -17,6 +17,8 @@ from src.payments.models import Payment
 from src.expenses.models import Expense
 from src.contracts.models import Contract
 
+from src.core.tempo import hoje_brt
+
 BRT = ZoneInfo("America/Sao_Paulo")
 
 
@@ -72,8 +74,9 @@ class DashboardRepository:
 
     def get_financial_stats(self, user_id: int) -> Dict[str, Any]:
         """Obter estatísticas financeiras — 2 queries ao invés de 4"""
-        current_month = date.today().month
-        current_year = date.today().year
+        hoje = hoje_brt()
+        current_month = hoje.month
+        current_year = hoje.year
 
         # Uma única query com agregação condicional para os três KPIs de pagamento
         result = (
@@ -134,7 +137,7 @@ class DashboardRepository:
 
     def get_monthly_revenue_trend(self, user_id: int, months: int = 12) -> list:
         """Obter tendência de receita mensal — 2 queries GROUP BY ao invés de 2×months queries em loop"""
-        today = date.today()
+        today = hoje_brt()
 
         # Calcular o primeiro dia do mês inicial do período
         start_month = today.month - months + 1

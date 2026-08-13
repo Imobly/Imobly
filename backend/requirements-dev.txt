@@ -1,8 +1,13 @@
-# Development dependencies
+# Dependências de DESENVOLVIMENTO — instaladas por cima de requirements.txt.
+#
+# NÃO fixe aqui nada que já esteja em requirements.txt: o pip aplica a versão
+# do último arquivo instalado e os testes passariam a validar um conjunto de
+# dependências diferente do que vai para produção. Era o caso de
+# `httpx==0.25.2`, que sobrescrevia o 0.24.1 exigido pela cadeia do Supabase
+# (gotrue/postgrest/storage3) — removido daqui por isso.
 pytest==7.4.3
 pytest-cov==4.1.0
 pytest-asyncio==0.21.1
-httpx==0.25.2
 black==23.12.1
 flake8==6.1.0
 isort==5.13.2

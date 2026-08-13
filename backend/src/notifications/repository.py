@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from .models import Notification
 from .schema import NotificationCreateInternal, NotificationUpdate
 
+from src.core.tempo import hoje_brt
+
 
 class NotificationRepository:
     def __init__(self, db: Session):
@@ -142,7 +144,7 @@ class NotificationRepository:
         return True
 
     def delete_old(self, user_id: int, days: int = 30) -> int:
-        cutoff = date.today() - timedelta(days=days)
+        cutoff = hoje_brt() - timedelta(days=days)
         result = (
             self.db.query(Notification)
             .filter(

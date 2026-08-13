@@ -66,7 +66,7 @@ class TenantRepository:
 
     def create(self, tenant_data: TenantCreateInternal) -> Tenant:
         """Criar um novo inquilino"""
-        db_tenant = Tenant(**tenant_data.dict())
+        db_tenant = Tenant(**tenant_data.model_dump())
         self.db.add(db_tenant)
         self.db.commit()
         self.db.refresh(db_tenant)
@@ -78,7 +78,7 @@ class TenantRepository:
         if not db_tenant:
             return None
 
-        for field, value in update_data.dict(exclude_unset=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             setattr(db_tenant, field, value)
 
         self.db.commit()

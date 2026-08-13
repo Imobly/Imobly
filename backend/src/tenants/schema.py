@@ -5,7 +5,7 @@ Schemas para o módulo de inquilinos (tenants)
 from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class EmergencyContact(BaseModel):
@@ -67,8 +67,7 @@ class TenantRead(TenantBase):
     # exibia TODO inquilino como "inativo".
     status: str = "inativo"
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TenantResponse(TenantRead):

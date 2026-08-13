@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
+from src.core.tempo import hoje_brt
+
 CENTAVO = Decimal("0.01")
 DIAS_DO_MES = Decimal(30)
 
@@ -67,7 +69,7 @@ def calcular_pagamento(
     juros_pct = dinheiro(taxa_juros)
     pago = dinheiro(valor_pago)
 
-    referencia = data_pagamento or date.today()
+    referencia = data_pagamento or hoje_brt()
     dias_atraso = max(0, (referencia - vencimento).days)
 
     multa = Decimal(0)

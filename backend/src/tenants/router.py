@@ -2,6 +2,7 @@
 Router para o módulo de inquilinos (tenants)
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -16,6 +17,8 @@ from src.core.ownership import assert_owned_optional
 from src.core.supabase_storage_service import SupabaseStorageService
 from .repository import TenantRepository
 from .schema import TenantCreate, TenantResponse, TenantUpdate, TenantCreateInternal
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -78,7 +81,7 @@ def create_tenant(
         )
     
     # Criar schema interno com user_id
-    data_dict = tenant_data.dict(exclude={'user_id'})
+    data_dict = tenant_data.model_dump(exclude={'user_id'})
     tenant_create_internal = TenantCreateInternal(
         **data_dict,
         user_id=user_id,
@@ -295,7 +298,14 @@ async def delete_tenant_document(
             file_path = document_url.split(marker, 1)[1]
             file_deleted = await storage.delete_file(file_path)
     except Exception:
-        pass
+        # O registro sai do banco de qualquer forma — o vínculo é o que o
+        # usuário enxerga. Mas o arquivo órfão precisa ficar rastreável: antes
+        # era `except Exception: pass`, e o arquivo sumia do sistema sem
+        # deixar registro de que continuava ocupando espaço no storage.
+        logger.exception(
+            "Documento removido do banco mas NÃO do storage (arquivo órfão): %s",
+            document_url,
+        )
 
     updated_docs = [d for d in current_docs if d.get("url") != document_url]
     repository.update(tenant_id, user_id, TenantUpdate(documents=updated_docs))

@@ -59,20 +59,34 @@ async def verify_jwt_token(token: str) -> dict:
     Raises:
         HTTPException: Se o token for inválido
     """
+    if not settings.SUPABASE_JWT_SECRET:
+        # Defesa em profundidade: `validate_runtime` já barra isto no startup,
+        # mas nunca valide assinatura com chave vazia — o PyJWT aceita, e
+        # qualquer token forjado passaria.
+        logger.error("SUPABASE_JWT_SECRET ausente — recusando validar tokens.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Servidor de autenticação mal configurado",
+        )
+
     try:
         # Supabase usa HS256 com JWT_SECRET (não RS256/JWKS)
-        # O segredo JWT é derivado do SUPABASE_JWT_SECRET
-        # Decodifica e valida o token
+        opcoes_de_verificacao = {"verify_exp": True}
+        emissor = settings.jwt_issuer
+
         payload = jwt.decode(
             token,
             settings.SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
             audience="authenticated",
-            options={"verify_exp": True}
+            # Sem `issuer`, um token válido de outro projeto Supabase que
+            # compartilhasse o segredo seria aceito.
+            issuer=emissor,
+            options=opcoes_de_verificacao,
         )
-        
+
         return payload
-        
+
     except jwt.ExpiredSignatureError:
         logger.warning("Token expirado")
         raise HTTPException(
@@ -280,13 +294,40 @@ async def get_current_user_local_id(
     return user.id
 
 
-def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+def require_admin(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     """
-    Dependency para exigir que o usuário seja admin
+    Exige privilégio administrativo.
+
+    A versão anterior comparava `current_user["role"] != "admin"`, mas o
+    Supabase emite `role: "authenticated"` para TODO usuário e esse papel nunca
+    era atribuído em lugar nenhum: a checagem era decorativa e ninguém jamais
+    seria admin. Pior, dava a impressão de haver controle de acesso por papel.
+
+    A fonte de verdade passa a ser `users.is_superuser`, que já existia na
+    tabela e nunca era lido. Aceita também `app_metadata.role == "admin"` do
+    token, para quem preferir gerenciar o papel pelo Supabase.
     """
-    if current_user.get("role") != "admin":
+    from src.auth.models import User
+
+    metadados = (current_user.get("payload") or {}).get("app_metadata") or {}
+    if metadados.get("role") == "admin":
+        return current_user
+
+    supabase_uid = current_user["id"]
+    usuario = db.query(User).filter(User.supabase_uid == supabase_uid).first()
+
+    if usuario is None or not usuario.is_superuser:
+        logger.warning(
+            "Acesso administrativo negado para %s em %s",
+            current_user.get("email"), request.url.path,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso negado: permissões de admin necessárias"
+            detail="Acesso negado: permissões de administrador necessárias",
         )
+
     return current_user

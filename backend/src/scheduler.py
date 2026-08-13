@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from src.contracts.models import Contract
 from src.payments.models import Payment
 from src.properties.models import Property
-from src.tenants.models import Tenant
 
 logger = logging.getLogger("imobly.scheduler")
 
@@ -79,8 +78,8 @@ def run_background_checks(db: Session, user_id: int) -> Dict[str, Any]:
         auto_expired += 1
     db.commit()
 
-    # ── 3. Contratos vincendos em 30, 60 e 90 dias (apenas contagem) ──
-    expiring_soon = (
+    # ── 3. Contratos vincendos em até 90 dias ──
+    contratos_vincendos = (
         db.query(Contract)
         .filter(
             Contract.user_id == user_id,
@@ -88,8 +87,17 @@ def run_background_checks(db: Session, user_id: int) -> Dict[str, Any]:
             Contract.end_date >= today,
             Contract.end_date <= today + timedelta(days=90),
         )
-        .count()
+        .all()
     )
+    expiring_soon = len(contratos_vincendos)
+
+    # ── 4. Gerar notificações ──
+    # O endpoint POST /notifications/process-background-tasks/ documentava a
+    # geração de notificações de inadimplência, vencimento e lembretes, mas
+    # nenhuma linha aqui as criava: `has_recent_notification` (a lógica
+    # antispam citada na docstring) nunca era chamada. A funcionalidade
+    # existia só no texto.
+    notificacoes_criadas = _gerar_notificacoes(db, user_id, today, contratos_vincendos)
 
     return {
         "payment_status_changes": {
@@ -101,7 +109,106 @@ def run_background_checks(db: Session, user_id: int) -> Dict[str, Any]:
         },
         "contracts_auto_expired": auto_expired,
         "expiring_soon": expiring_soon,
+        "notifications_created": notificacoes_criadas,
     }
+
+
+def _gerar_notificacoes(
+    db: Session,
+    user_id: int,
+    today: date,
+    contratos_vincendos: List[Contract],
+) -> int:
+    """
+    Cria as notificações que o endpoint sempre prometeu.
+
+    Antispam: `has_recent_notification` impede repetir o mesmo alerta para a
+    mesma entidade dentro de 7 dias. Sem isso, o job diário geraria uma
+    notificação por dia para cada pagamento atrasado até ele ser quitado, e o
+    usuário aprenderia a ignorar o sino.
+    """
+    from src.notifications.repository import NotificationRepository
+    from src.notifications.schema import NotificationCreateInternal
+
+    repo = NotificationRepository(db)
+    criadas = 0
+
+    def _criar(**dados) -> None:
+        nonlocal criadas
+        repo.create(NotificationCreateInternal(user_id=user_id, **dados))
+        criadas += 1
+
+    # ── Pagamentos atrasados ──
+    atrasados = (
+        db.query(Payment)
+        .filter(Payment.user_id == user_id, Payment.status == "atrasado")
+        .all()
+    )
+    for pagamento in atrasados:
+        if repo.has_recent_notification(user_id, str(pagamento.id), "payment_overdue"):
+            continue
+        dias = (today - pagamento.due_date).days
+        _criar(
+            type="payment_overdue",
+            title="Pagamento em atraso",
+            message=(
+                f"Pagamento de R$ {pagamento.total_amount} venceu há {dias} dia(s) "
+                f"(vencimento em {pagamento.due_date:%d/%m/%Y})."
+            ),
+            priority="urgent" if dias > 30 else "high",
+            action_required=True,
+            related_id=str(pagamento.id),
+            related_type="payment",
+            date=today,
+        )
+
+    # ── Contratos próximos do vencimento ──
+    for contrato in contratos_vincendos:
+        if repo.has_recent_notification(user_id, str(contrato.id), "contract_expiring"):
+            continue
+        dias = (contrato.end_date - today).days
+        _criar(
+            type="contract_expiring",
+            title="Contrato próximo do vencimento",
+            message=(
+                f"O contrato \"{contrato.title}\" vence em {dias} dia(s) "
+                f"({contrato.end_date:%d/%m/%Y})."
+            ),
+            priority="high" if dias <= 30 else "medium",
+            action_required=dias <= 30,
+            related_id=str(contrato.id),
+            related_type="contract",
+            date=today,
+        )
+
+    # ── Lembretes de pagamento (vencendo nos próximos 3 dias) ──
+    a_vencer = (
+        db.query(Payment)
+        .filter(
+            Payment.user_id == user_id,
+            Payment.status == "pendente",
+            Payment.due_date >= today,
+            Payment.due_date <= today + timedelta(days=3),
+        )
+        .all()
+    )
+    for pagamento in a_vencer:
+        if repo.has_recent_notification(user_id, str(pagamento.id), "reminder"):
+            continue
+        _criar(
+            type="reminder",
+            title="Pagamento a vencer",
+            message=(
+                f"Pagamento de R$ {pagamento.total_amount} vence em "
+                f"{pagamento.due_date:%d/%m/%Y}."
+            ),
+            priority="medium",
+            related_id=str(pagamento.id),
+            related_type="payment",
+            date=today,
+        )
+
+    return criadas
 
 
 # ────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -74,20 +74,40 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET") or os.getenv("SECRET_KEY", "")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "ignore"  # Ignorar variáveis extras do Docker
+    # `SettingsConfigDict` substitui a `class Config`, removida no Pydantic v3.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",  # Ignorar variáveis extras do Docker
+    )
+
+    @property
+    def jwt_issuer(self) -> str | None:
+        """
+        Emissor esperado dos tokens: `{SUPABASE_URL}/auth/v1`.
+
+        Validar o `iss` impede que um token legítimo de OUTRO projeto Supabase
+        seja aceito aqui — o segredo é por projeto, mas a checagem torna a
+        fronteira explícita e falha alto se a URL for trocada sem o segredo.
+        """
+        if not self.SUPABASE_URL:
+            return None
+        return f"{self.SUPABASE_URL.rstrip('/')}/auth/v1"
 
     def validate_runtime(self) -> None:
         """
         Validações de inicialização (fail-fast). Chamada no startup da app.
-        Fora de ambiente de desenvolvimento, o segredo JWT é obrigatório.
+
+        O segredo JWT é obrigatório em TODOS os ambientes. Antes só era exigido
+        fora de desenvolvimento, e o PyJWT aceita HS256 com chave vazia: com
+        `SUPABASE_JWT_SECRET=""` qualquer pessoa forjava um token válido contra
+        o ambiente de dev — que costuma apontar para dados reais.
         """
-        if self.ENVIRONMENT not in {"dev", "development"} and not self.SUPABASE_JWT_SECRET:
+        if not self.SUPABASE_JWT_SECRET:
             raise RuntimeError(
-                "SUPABASE_JWT_SECRET (ou SECRET_KEY) não configurado — "
-                "obrigatório fora de desenvolvimento para validar tokens."
+                "SUPABASE_JWT_SECRET (ou SECRET_KEY) não configurado. "
+                "É obrigatório em todos os ambientes: sem ele, tokens forjados "
+                "com segredo vazio seriam aceitos."
             )
 
 

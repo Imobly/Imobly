@@ -40,7 +40,7 @@ class PropertyRepository:
 
     def create(self, property_data: PropertyCreateInternal) -> Property:
         """Criar uma nova propriedade"""
-        db_property = Property(**property_data.dict())
+        db_property = Property(**property_data.model_dump())
         self.db.add(db_property)
         self.db.commit()
         self.db.refresh(db_property)
@@ -52,7 +52,7 @@ class PropertyRepository:
         if not db_property:
             return None
 
-        for field, value in update_data.dict(exclude_unset=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             setattr(db_property, field, value)
 
         self.db.commit()

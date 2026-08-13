@@ -218,6 +218,17 @@ DATABASE_URL_PROD=postgresql://postgres.yyeldattafklyutbbnhu:[SUA_SENHA]@aws-0-u
 - ✅ Suporta muito mais conexões simultâneas
 - ✅ Ideal para ambientes de produção com múltiplas instâncias
 
+### Segredo JWT — obrigatório em todos os ambientes
+
+`SUPABASE_JWT_SECRET` (ou o alias `SECRET_KEY`) passou a ser exigido também em
+desenvolvimento, e a aplicação **aborta o startup** sem ele. O motivo é
+concreto: o PyJWT aceita HS256 com chave vazia, então com o segredo em branco
+qualquer pessoa forjaria um token válido — e o ambiente de dev costuma apontar
+para dados reais.
+
+Os tokens também passam a ter o emissor (`iss`) validado contra
+`{SUPABASE_URL}/auth/v1`, o que impede aceitar um token de outro projeto.
+
 ### Rate limiting
 
 `/auth/login`, `/auth/register`, `/auth/change-password` e `/auth/refresh` são

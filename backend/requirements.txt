@@ -1,3 +1,9 @@
+# ============================================================
+# Dependências de PRODUÇÃO.
+# Ferramentas de teste e lint ficam em requirements-dev.txt: instaladas aqui,
+# inflavam a imagem de produção e ampliavam a superfície de ataque sem uso.
+# ============================================================
+
 # Framework web
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -7,16 +13,14 @@ sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
-# Cache e sessões (removido - não sendo usado)
-# redis==5.0.1
-# aioredis==2.0.1
-
 # Supabase (Auth + Storage) - Versões compatíveis
 supabase==2.4.4
 gotrue==2.8.0
 httpx==0.24.1
+
+# Validação de JWT. `python-jose` foi removido: estava declarado mas nunca
+# importado — só o PyJWT é usado (src/security.py).
 PyJWT>=2.8.0
-python-jose[cryptography]==3.3.0
 
 # Validação de dados e settings
 pydantic==2.5.0
@@ -37,14 +41,3 @@ slowapi==0.1.9
 
 # Cache com TTL e teto de tamanho (resolução de identidade)
 cachetools==5.3.2
-
-# Supabase Storage (para produção)
-# supabase==2.0.0 - já incluído acima na versão 2.8.0
-
-# Desenvolvimento e testes
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-black==23.11.0
-isort==5.12.0
-flake8==6.1.0

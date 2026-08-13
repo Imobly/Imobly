@@ -42,7 +42,7 @@ class ExpenseRepository:
 
     def create(self, expense_data: ExpenseCreateInternal) -> Expense:
         """Criar uma nova despesa"""
-        expense_dict = expense_data.dict()
+        expense_dict = expense_data.model_dump()
         expense_dict['id'] = str(uuid.uuid4())
         db_expense = Expense(**expense_dict)
         self.db.add(db_expense)
@@ -56,7 +56,7 @@ class ExpenseRepository:
         if not db_expense:
             return None
 
-        for field, value in update_data.dict(exclude_unset=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             setattr(db_expense, field, value)
 
         self.db.commit()
@@ -72,6 +72,44 @@ class ExpenseRepository:
         self.db.delete(db_expense)
         self.db.commit()
         return True
+
+    def search(
+        self,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 100,
+        category: Optional[str] = None,
+        status: Optional[str] = None,
+        property_id: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> List[Expense]:
+        """
+        Busca com filtros COMBINÁVEIS e paginação sempre aplicada.
+
+        O router encadeava os filtros com if/elif, então só o primeiro valia:
+        `?property_id=1&status=paid` devolvia todas as despesas do imóvel,
+        ignorando o status sem avisar.
+        """
+        query = self.db.query(Expense).filter(Expense.user_id == user_id)
+
+        if category:
+            query = query.filter(Expense.category == category)
+        if status:
+            query = query.filter(Expense.status == status)
+        if property_id:
+            query = query.filter(Expense.property_id == property_id)
+        if start_date:
+            query = query.filter(Expense.date >= start_date)
+        if end_date:
+            query = query.filter(Expense.date <= end_date)
+
+        return (
+            query.order_by(Expense.date.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
     def get_by_property(self, user_id: int, property_id: int) -> List[Expense]:
         """Buscar despesas por propriedade"""

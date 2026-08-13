@@ -63,15 +63,28 @@ class ContractRepository:
         )
 
     def get_expiring(self, user_id: int, days_ahead: int = 30) -> List[Contract]:
+        """
+        Contratos ativos que vencem nos próximos `days_ahead` dias.
+
+        O piso (`end_date >= hoje`) faltava: contratos ativos JÁ vencidos —
+        enquanto o job diário não roda e os marca como expirados — apareciam
+        como "vencendo em 30 dias".
+        """
         from datetime import timedelta
-        cutoff = date.today() + timedelta(days=days_ahead)
+
+        from src.core.tempo import hoje_brt
+
+        hoje = hoje_brt()
+        cutoff = hoje + timedelta(days=days_ahead)
         return (
             self.db.query(Contract)
             .filter(
                 Contract.user_id == user_id,
                 Contract.status == "ativo",
+                Contract.end_date >= hoje,
                 Contract.end_date <= cutoff,
             )
+            .order_by(Contract.end_date.asc())
             .all()
         )
 
@@ -81,7 +94,7 @@ class ContractRepository:
         transação — do contrário uma falha entre os dois commits deixa um
         contrato ativo com o imóvel marcado como vago.
         """
-        contract = Contract(**data.dict())
+        contract = Contract(**data.model_dump())
         self.db.add(contract)
         if commit:
             self.db.commit()
@@ -94,7 +107,7 @@ class ContractRepository:
         contract = self.get_by_id_and_user(contract_id, user_id)
         if not contract:
             return None
-        update_data = data.dict(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(contract, field, value)
         self.db.commit()

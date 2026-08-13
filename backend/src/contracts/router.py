@@ -90,7 +90,7 @@ def create_contract(
     assert_owned(db, Tenant, contract_data.tenant_id, user_id)
 
     internal = ContractCreateInternal(
-        **contract_data.dict(),
+        **contract_data.model_dump(),
         user_id=user_id,
     )
 

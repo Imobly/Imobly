@@ -6,7 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # Payment method values sent by the frontend UI
@@ -21,10 +21,12 @@ class PaymentBase(BaseModel):
     due_date: date
     payment_date: Optional[date] = None
     amount: Decimal = Field(..., gt=0)
-    fine_amount: Decimal = Field(0, ge=0)
+    # `Decimal("0")`, não `0`: o Pydantic v2 não valida defaults, então um
+    # int aqui saía como int na serialização de um campo monetário.
+    fine_amount: Decimal = Field(default=Decimal("0"), ge=0)
     # Juros separados da multa: somados num campo só, a composição da cobrança
     # ficava impossível de auditar.
-    interest_amount: Decimal = Field(0, ge=0)
+    interest_amount: Decimal = Field(default=Decimal("0"), ge=0)
     # `ge=0`, não `gt=0`: registrar uma cobrança em aberto (valor pago zero) é
     # caso de uso legítimo — e era, aliás, o único caminho capaz de produzir o
     # status "atrasado" que o próprio cálculo gera. Com `gt=0` a validação
@@ -83,8 +85,7 @@ class PaymentRead(PaymentBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaymentResponse(PaymentRead):

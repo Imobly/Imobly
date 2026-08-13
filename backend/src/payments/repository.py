@@ -10,6 +10,8 @@ from sqlalchemy import and_
 from .models import Payment
 from .schema import PaymentCreate, PaymentUpdate, PaymentCreateInternal
 
+from src.core.tempo import hoje_brt
+
 
 class PaymentRepository:
     """Repository para operações com pagamentos"""
@@ -41,7 +43,7 @@ class PaymentRepository:
 
     def create(self, payment_data: PaymentCreateInternal) -> Payment:
         """Criar um novo pagamento"""
-        db_payment = Payment(**payment_data.dict())
+        db_payment = Payment(**payment_data.model_dump())
         self.db.add(db_payment)
         self.db.commit()
         self.db.refresh(db_payment)
@@ -61,7 +63,7 @@ class PaymentRepository:
         if not db_payment:
             return None
 
-        for field, value in update_data.dict(exclude_unset=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             setattr(db_payment, field, value)
 
         if commit:
@@ -81,33 +83,58 @@ class PaymentRepository:
         self.db.commit()
         return True
 
-    def get_by_property(self, user_id: int, property_id: int) -> List[Payment]:
-        """Buscar pagamentos por propriedade"""
+    def search(
+        self,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 100,
+        status: Optional[str] = None,
+        property_id: Optional[int] = None,
+        tenant_id: Optional[int] = None,
+        contract_id: Optional[int] = None,
+    ) -> List[Payment]:
+        """
+        Busca com filtros COMBINÁVEIS e paginação sempre aplicada.
+
+        Substitui os `get_by_*` que o router encadeava com if/elif: filtros
+        além do primeiro eram descartados em silêncio (pedir
+        `?property_id=1&status=atrasado` devolvia todos os pagamentos do
+        imóvel, ignorando o status), e nenhum deles respeitava skip/limit —
+        um usuário com muitos pagamentos recebia a tabela inteira.
+        """
+        query = self.db.query(Payment).filter(Payment.user_id == user_id)
+
+        if status:
+            query = query.filter(Payment.status == status)
+        if property_id:
+            query = query.filter(Payment.property_id == property_id)
+        if tenant_id:
+            query = query.filter(Payment.tenant_id == tenant_id)
+        if contract_id:
+            query = query.filter(Payment.contract_id == contract_id)
+
         return (
-            self.db.query(Payment)
-            .filter(Payment.user_id == user_id, Payment.property_id == property_id)
+            query.order_by(Payment.due_date.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
+
+    def get_by_property(self, user_id: int, property_id: int) -> List[Payment]:
+        """Buscar pagamentos por propriedade"""
+        return self.search(user_id, property_id=property_id, limit=1000)
 
     def get_by_tenant(self, user_id: int, tenant_id: int) -> List[Payment]:
         """Buscar pagamentos por inquilino"""
-        return (
-            self.db.query(Payment)
-            .filter(Payment.user_id == user_id, Payment.tenant_id == tenant_id)
-            .all()
-        )
+        return self.search(user_id, tenant_id=tenant_id, limit=1000)
 
     def get_by_status(self, user_id: int, status: str) -> List[Payment]:
         """Buscar pagamentos por status"""
-        return (
-            self.db.query(Payment)
-            .filter(Payment.user_id == user_id, Payment.status == status)
-            .all()
-        )
+        return self.search(user_id, status=status, limit=1000)
 
     def get_overdue_payments(self, user_id: int) -> List[Payment]:
         """Buscar pagamentos em atraso"""
-        today = date.today()
+        today = hoje_brt()
         return (
             self.db.query(Payment)
             .filter(

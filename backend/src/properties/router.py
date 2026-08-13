@@ -76,7 +76,7 @@ def create_property(
 
     # Criar schema interno com user_id
     property_create_internal = PropertyCreateInternal(
-        **property_data.dict(exclude={'user_id'}),
+        **property_data.model_dump(exclude={'user_id'}),
         user_id=user_id
     )
     

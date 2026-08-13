@@ -33,20 +33,22 @@ def get_expenses(
     user_id: int = Depends(get_current_user_local_id),
     repository: ExpenseRepository = Depends(get_expense_repository),
 ):
-    """Listar despesas com filtros opcionais"""
+    """
+    Listar despesas com filtros COMBINÁVEIS.
 
-    if start_date and end_date:
-        expenses = repository.get_by_date_range(user_id, start_date, end_date)
-    elif property_id:
-        expenses = repository.get_by_property(user_id, property_id)
-    elif category:
-        expenses = repository.get_by_category(user_id, category)
-    elif status:
-        expenses = repository.get_by_status(user_id, status)
-    else:
-        expenses = repository.get_by_user(user_id, skip, limit)
-    
-    return expenses
+    Antes eram encadeados com if/elif e só o primeiro tinha efeito; os demais
+    eram descartados sem aviso.
+    """
+    return repository.search(
+        user_id=user_id,
+        skip=skip,
+        limit=limit,
+        category=category,
+        status=status,
+        property_id=property_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
 
 @router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
@@ -63,7 +65,7 @@ def create_expense(
     assert_owned(db, Property, expense_data.property_id, user_id)
 
     expense_create_internal = ExpenseCreateInternal(
-        **expense_data.dict(exclude={'user_id'}),
+        **expense_data.model_dump(exclude={'user_id'}),
         user_id=user_id
     )
     

@@ -6,7 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class ContractBase(BaseModel):
@@ -22,9 +22,13 @@ class ContractBase(BaseModel):
     due_day: Optional[int] = Field(None, ge=1, le=31, description="Dia do vencimento (1-31)")
     status: str = Field("ativo", pattern="^(ativo|inativo|expirado)$")
 
-    @validator("end_date")
-    def end_date_after_start_date(cls, v, values):
-        if "start_date" in values and v <= values["start_date"]:
+    # `@field_validator` substitui `@validator`, removido no Pydantic v3.
+    # Em v2 os valores já validados ficam em `info.data`.
+    @field_validator("end_date")
+    @classmethod
+    def end_date_after_start_date(cls, v: date, info: ValidationInfo) -> date:
+        start_date = info.data.get("start_date")
+        if start_date is not None and v <= start_date:
             raise ValueError("end_date deve ser posterior a start_date")
         return v
 
@@ -57,5 +61,4 @@ class ContractResponse(ContractBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
