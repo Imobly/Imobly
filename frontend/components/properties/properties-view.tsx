@@ -12,7 +12,7 @@ import { PropertyList } from "@/components/properties/property-list"
 import { PropertyDialog } from "@/components/properties/property-dialog"
 import { PropertyFilters } from "@/components/properties/property-filters"
 import { useProperties } from "@/lib/hooks/useProperties"
-import { Property, convertApiToProperty, convertPropertyToApi } from "@/lib/types/property"
+import { Property, PropertyDraft, convertApiToProperty, convertPropertyToApi } from "@/lib/types/property"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
@@ -93,7 +93,7 @@ export function PropertiesView() {
     setShowDialog(true)
   }
 
-  const handleSave = async (propertyData: Property) => {
+  const handleSave = async (propertyData: PropertyDraft) => {
     // Converter dados do formulário para formato da API
     const apiData = convertPropertyToApi(propertyData)
     console.log("💾 Salvando propriedade:", apiData)

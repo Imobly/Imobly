@@ -44,8 +44,8 @@ def get_tenants(
         tenants = repository.get_inactive_tenants(user_id)
     else:
         tenants = repository.get_by_user(user_id, skip, limit)
-    
-    return tenants
+
+    return repository.anexar_status(tenants, user_id)
 
 
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
@@ -112,7 +112,7 @@ def get_tenant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Inquilino não encontrado"
         )
-    return tenant
+    return repository.anexar_status([tenant], user_id)[0]
 
 
 @router.put("/{tenant_id}", response_model=TenantResponse)

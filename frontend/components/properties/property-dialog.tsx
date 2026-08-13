@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload, X, Plus, Edit, Building, Loader2 } from "lucide-react"
-import { Property } from "@/lib/types/property"
+import { Property, PropertyDraft } from "@/lib/types/property"
 import { useTenants } from "@/lib/hooks/useTenants"
 import { useAuth } from "@/lib/contexts/auth"
 import { integerMask, currencyMask, currencyUnmask, areaMask, cepMask } from "@/lib/utils/masks"
@@ -30,10 +30,10 @@ interface PropertyDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   property?: Property | null
-  onSave: (property: Property) => Promise<Property | undefined>
+  onSave: (property: PropertyDraft) => Promise<Property | undefined>
 }
 
-const initialProperty: Property = {
+const initialProperty: PropertyDraft = {
   name: "",
   address: "",
   neighborhood: "",
@@ -53,7 +53,7 @@ const initialProperty: Property = {
 }
 
 export function PropertyDialog({ open, onOpenChange, property, onSave }: PropertyDialogProps) {
-  const [formData, setFormData] = useState<Property>(initialProperty)
+  const [formData, setFormData] = useState<PropertyDraft>(initialProperty)
   const [isLoading, setIsLoading] = useState(false)
   const [uploadingImages, setUploadingImages] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -267,7 +267,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
   const handleRemoveImage = async (imageUrl: string, index: number) => {
     if (!property?.id) {
       // Se não tem ID, apenas remove localmente
-      setFormData((prev) => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }))
+      setFormData((prev) => ({ ...prev, images: (prev.images ?? []).filter((_, i) => i !== index) }))
       return
     }
 
@@ -622,9 +622,9 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                       )}
 
                       {/* Grid de Imagens */}
-                      {formData.images.length > 0 && (
+                      {(formData.images?.length ?? 0) > 0 && (
                         <div className="grid gap-4 md:grid-cols-3 mt-4">
-                          {formData.images.map((image, index) => (
+                          {(formData.images ?? []).map((image, index) => (
                             <div key={index} className="relative group">
                               <img
                                 src={image || "/placeholder.svg"}

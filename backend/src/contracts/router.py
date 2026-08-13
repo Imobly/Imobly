@@ -6,10 +6,12 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.security import get_current_user_local_id
+from src.core.integrity import traduzir_erros_de_integridade
 from src.core.ownership import assert_owned, assert_owned_optional
 from .repository import ContractRepository
 from .schema import ContractCreate, ContractCreateInternal, ContractResponse, ContractUpdate
@@ -94,18 +96,26 @@ def create_contract(
 
     # Contrato e imóvel numa transação só: eram dois commits separados, e uma
     # falha entre eles deixava contrato ativo com o imóvel ainda 'vacant'.
-    try:
-        new_contract = repo.create(internal, commit=False)
+    with traduzir_erros_de_integridade(
+        db,
+        conflito_exclusao=(
+            "Já existe um contrato ativo para este imóvel no período informado."
+        ),
+    ):
+        try:
+            new_contract = repo.create(internal, commit=False)
 
-        if new_contract.status == "ativo":
-            prop = assert_owned(db, Property, new_contract.property_id, user_id)
-            prop.status = "occupied"
-            prop.tenant_id = new_contract.tenant_id
+            if new_contract.status == "ativo":
+                prop = assert_owned(db, Property, new_contract.property_id, user_id)
+                prop.status = "occupied"
+                prop.tenant_id = new_contract.tenant_id
 
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+            db.commit()
+        except IntegrityError:
+            raise  # tratado pelo contexto acima (rollback incluído)
+        except Exception:
+            db.rollback()
+            raise
 
     db.refresh(new_contract)
     return new_contract

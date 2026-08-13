@@ -130,8 +130,10 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
         // Atualizar o valor do aluguel no contrato
         setFormData(prev => ({
           ...prev,
+          // `contract` é opcional; sem o fallback, espalhar `undefined` torna
+          // os campos obrigatórios do contrato possivelmente indefinidos.
           contract: {
-            ...prev.contract,
+            ...(prev.contract ?? initialTenant.contract!),
             rent: formattedRent
           }
         }))
@@ -144,7 +146,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
   const loadProperties = async () => {
     setLoadingProperties(true)
     try {
-      const response = await apiClient.get('/properties/')
+      const response = await apiClient.get<any[]>('/properties/')
       setProperties(response || [])
     } catch (error) {
       console.error('Erro ao carregar propriedades:', error)

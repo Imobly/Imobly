@@ -45,7 +45,9 @@ function Button({
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
   }) {
-  const Comp = asChild ? Slot : 'button'
+  // `React.ElementType`: sem a anotação, o union `Slot | 'button'` faz o TS
+  // tentar reconciliar os tipos de `ref` dos dois e reprovar o spread.
+  const Comp: React.ElementType = asChild ? Slot : 'button'
 
   return (
     <Comp

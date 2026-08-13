@@ -35,6 +35,9 @@ apscheduler==3.10.4
 # Rate limiting das rotas de autenticação
 slowapi==0.1.9
 
+# Cache com TTL e teto de tamanho (resolução de identidade)
+cachetools==5.3.2
+
 # Supabase Storage (para produção)
 # supabase==2.0.0 - já incluído acima na versão 2.8.0
 

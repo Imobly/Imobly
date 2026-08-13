@@ -36,11 +36,21 @@ const nextConfig = {
   },
   
   // Build settings
+  //
+  // As duas checagens estavam DESLIGADAS. Num código gerado por IA, o
+  // compilador TypeScript é a principal defesa contra props alucinadas e
+  // contratos de API que não batem — e era exatamente ele que estava mudo.
+  // Ao reativar, apareceram 13 erros reais em 7 arquivos; um deles era um bug
+  // visível: a UI lia `tenant.status`, campo que a API não devolvia, e todo
+  // inquilino era exibido como "inativo".
+  //
+  // Mantenha ligado. Se um erro travar o build, corrija o tipo — não volte a
+  // desligar a checagem.
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   
   // Environment variables available to the client

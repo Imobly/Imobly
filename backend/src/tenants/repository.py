@@ -145,6 +145,34 @@ class TenantRepository:
             .all()
         )
 
+    def anexar_status(self, tenants: List[Tenant], user_id: int) -> List[Tenant]:
+        """
+        Preenche o atributo `status` de cada inquilino a partir do contrato.
+
+        O status não é coluna — deriva do contrato vinculado. Resolvido em UMA
+        query para a lista inteira, em vez de uma por inquilino.
+        """
+        if not tenants:
+            return tenants
+
+        ids_de_contrato = {t.contract_id for t in tenants if t.contract_id}
+        ativos: set = set()
+        if ids_de_contrato:
+            ativos = {
+                cid
+                for (cid,) in self.db.query(Contract.id)
+                .filter(
+                    Contract.id.in_(ids_de_contrato),
+                    Contract.user_id == user_id,
+                    Contract.status == "ativo",
+                )
+                .all()
+            }
+
+        for tenant in tenants:
+            tenant.status = "ativo" if tenant.contract_id in ativos else "inativo"
+        return tenants
+
     def count_by_user(self, user_id: int) -> int:
         """Contar inquilinos do usuário"""
         return self.db.query(Tenant).filter(Tenant.user_id == user_id).count()

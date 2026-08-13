@@ -182,11 +182,14 @@ class TestAtomicidade:
 
     def test_contrato_e_imovel_na_mesma_transacao(self, client_as, cenario, db_session):
         client: TestClient = client_as(cenario["user"].id)
+        # O cenário já tem contrato ativo indo até hoje+335; este começa depois,
+        # para não esbarrar na constraint anti-dupla-locação (revisão 0010).
+        inicio = date.today() + timedelta(days=400)
         r = client.post("/api/v1/contracts/", json={
             "title": "Novo", "property_id": cenario["prop"].id,
             "tenant_id": cenario["tenant"].id,
-            "start_date": str(date.today()),
-            "end_date": str(date.today() + timedelta(days=365)),
+            "start_date": str(inicio),
+            "end_date": str(inicio + timedelta(days=365)),
             "rent": 1500, "deposit": 0, "interest_rate": 0, "fine_rate": 0,
             "status": "ativo",
         })

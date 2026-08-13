@@ -32,7 +32,9 @@ function Badge({
   ...props
 }: React.ComponentProps<'span'> &
   VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : 'span'
+  // `React.ElementType`: sem a anotação, o union `Slot | 'span'` faz o TS
+  // tentar reconciliar os tipos de `ref` dos dois e reprovar o spread.
+  const Comp: React.ElementType = asChild ? Slot : 'span'
 
   return (
     <Comp

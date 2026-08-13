@@ -4,7 +4,10 @@ Módulo de segurança e autenticação
 Lógica de JWT, hash de senha e autenticação via Supabase
 """
 
+import threading
 from typing import Optional
+
+from cachetools import TTLCache
 from fastapi import HTTPException, Request, status, Depends
 from fastapi.security import HTTPBearer
 from fastapi.security.http import HTTPAuthorizationCredentials
@@ -129,10 +132,107 @@ async def get_current_user_id(
     return current_user["id"]
 
 
-# Cache em processo do mapeamento UUID do Supabase -> id local (imutável após
-# criado). Evita repetir o SELECT FROM users em cada request — relevante quando
-# o frontend dispara várias chamadas em paralelo (ex.: dashboard).
-_local_id_cache: dict[str, int] = {}
+# Cache em processo do mapeamento UUID do Supabase -> id local. Evita repetir o
+# SELECT FROM users em cada request — relevante quando o frontend dispara
+# várias chamadas em paralelo (ex.: dashboard).
+#
+# Era um `dict` sem limite e sem expiração: crescia indefinidamente enquanto o
+# processo vivesse (um item por usuário que já acessou) e nunca refletia
+# mudanças feitas no banco — desativar uma conta não tinha efeito até reiniciar.
+#
+# TTL curto porque a resolução é barata: o ganho é absorver a rajada de
+# requisições paralelas de um mesmo carregamento de tela, não guardar estado
+# por horas. `maxsize` transforma o vazamento num teto previsível.
+_local_id_cache: TTLCache = TTLCache(maxsize=10_000, ttl=300)
+
+# O cache é lido e escrito por várias threads (FastAPI roda dependências
+# síncronas em threadpool); `TTLCache` não é thread-safe por si só.
+_cache_lock = threading.Lock()
+
+
+def invalidar_cache_de_identidade(supabase_uid: str | None = None) -> None:
+    """
+    Remove uma entrada (ou todas) do cache de identidade.
+
+    Necessário quando o vínculo usuário↔registro local muda — hoje, ao
+    reivindicar o `supabase_uid` de uma linha legada.
+    """
+    with _cache_lock:
+        if supabase_uid is None:
+            _local_id_cache.clear()
+        else:
+            _local_id_cache.pop(supabase_uid, None)
+
+
+def _resolver_usuario_local(db: Session, supabase_uid: str, email: str):
+    """
+    Resolve (ou cria) o registro local correspondente à identidade do Supabase.
+
+    Três caminhos, nesta ordem:
+      1. Pela chave imutável `supabase_uid` — o caso normal.
+      2. Linha legada, anterior à coluna: localiza por e-mail UMA vez e
+         reivindica o uid, migrando a identidade.
+      3. Primeiro acesso: cria o registro.
+
+    Extraído de `get_current_user_local_id` para manter aquela dependency
+    legível — a lógica de resolução tem ramificações demais para conviver com
+    o cache e as checagens de acesso no mesmo corpo.
+    """
+    from src.auth.models import User
+
+    user = db.query(User).filter(User.supabase_uid == supabase_uid).first()
+    if user is not None:
+        return user
+
+    legacy = db.query(User).filter(User.email == email).first()
+    if legacy is not None:
+        if legacy.supabase_uid and legacy.supabase_uid != supabase_uid:
+            # O e-mail pertence a outra identidade do Supabase. Nunca sequestre
+            # a linha — falhe alto para investigação.
+            logger.error(
+                "Conflito de identidade: e-mail %s pertence ao uid %s, token traz %s",
+                email, legacy.supabase_uid, supabase_uid,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Conflito de identidade da conta. Contate o suporte.",
+            )
+        legacy.supabase_uid = supabase_uid
+        db.commit()
+        db.refresh(legacy)
+        # O vínculo mudou: descarta qualquer resolução anterior.
+        invalidar_cache_de_identidade(supabase_uid)
+        logger.info("Identidade migrada para supabase_uid: %s (id=%s)", email, legacy.id)
+        return legacy
+
+    username = email.split("@")[0]
+    user = User(
+        supabase_uid=supabase_uid,
+        email=email,
+        username=username,
+        full_name=username,
+        hashed_password=supabase_uid,
+        is_active=True,
+        is_superuser=False,
+    )
+    db.add(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        # Requisições concorrentes do mesmo usuário novo (o dashboard dispara
+        # várias em paralelo): a outra venceu a corrida — releia a linha dela.
+        db.rollback()
+        user = db.query(User).filter(User.supabase_uid == supabase_uid).first()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Não foi possível provisionar o usuário",
+            )
+        return user
+
+    logger.info("Usuário local criado automaticamente: %s (id=%s)", email, user.id)
+    return user
 
 
 async def get_current_user_local_id(
@@ -151,13 +251,12 @@ async def get_current_user_local_id(
 
     supabase_uid = current_user["id"]
 
-    # Cache entre requisições (mapeamento imutável UUID -> id local)
-    cached = _local_id_cache.get(supabase_uid)
+    # Cache entre requisições (UUID -> id local), com TTL curto
+    with _cache_lock:
+        cached = _local_id_cache.get(supabase_uid)
     if cached is not None:
         request.state.user_local_id = cached
         return cached
-
-    from src.auth.models import User
 
     email = current_user.get("email")
     if not email:
@@ -166,59 +265,7 @@ async def get_current_user_local_id(
             detail="Email não encontrado no token"
         )
 
-    # 1. Resolução pela chave de identidade imutável.
-    user = db.query(User).filter(User.supabase_uid == supabase_uid).first()
-
-    if user is None:
-        # 2. Linha legada, anterior à coluna supabase_uid: localiza por e-mail
-        #    UMA única vez e reivindica o uid, migrando a identidade.
-        legacy = db.query(User).filter(User.email == email).first()
-        if legacy is not None:
-            if legacy.supabase_uid and legacy.supabase_uid != supabase_uid:
-                # O e-mail pertence a outra identidade do Supabase. Nunca
-                # sequestre a linha — falhe alto para investigação.
-                logger.error(
-                    "Conflito de identidade: e-mail %s pertence ao uid %s, token traz %s",
-                    email, legacy.supabase_uid, supabase_uid,
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Conflito de identidade da conta. Contate o suporte.",
-                )
-            legacy.supabase_uid = supabase_uid
-            db.commit()
-            db.refresh(legacy)
-            user = legacy
-            logger.info("Identidade migrada para supabase_uid: %s (id=%s)", email, user.id)
-
-    if user is None:
-        # 3. Primeiro acesso: cria o registro local.
-        username = email.split("@")[0]
-        user = User(
-            supabase_uid=supabase_uid,
-            email=email,
-            username=username,
-            full_name=username,
-            hashed_password=supabase_uid,
-            is_active=True,
-            is_superuser=False
-        )
-        db.add(user)
-        try:
-            db.commit()
-            db.refresh(user)
-        except IntegrityError:
-            # Requisições concorrentes do mesmo usuário novo (o dashboard dispara
-            # várias em paralelo): a outra venceu a corrida — releia a linha dela.
-            db.rollback()
-            user = db.query(User).filter(User.supabase_uid == supabase_uid).first()
-            if user is None:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Não foi possível provisionar o usuário",
-                )
-        else:
-            logger.info(f"Usuário local criado automaticamente: {email} (id={user.id})")
+    user = _resolver_usuario_local(db, supabase_uid, email)
 
     if not user.is_active:
         raise HTTPException(
@@ -227,7 +274,8 @@ async def get_current_user_local_id(
         )
 
     # Armazena no cache de processo e no estado da requisição para reutilização
-    _local_id_cache[supabase_uid] = user.id
+    with _cache_lock:
+        _local_id_cache[supabase_uid] = user.id
     request.state.user_local_id = user.id
     return user.id
 

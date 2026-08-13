@@ -15,6 +15,12 @@ export interface Unit {
   updated_at?: string
 }
 
+/**
+ * Propriedade ainda não persistida: `id` só existe depois de salva.
+ * Usado pelo formulário, que serve tanto para criação quanto edição.
+ */
+export type PropertyDraft = Omit<Property, 'id'> & { id?: number }
+
 export interface Property {
   id: number
   name: string

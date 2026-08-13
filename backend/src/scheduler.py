@@ -111,15 +111,42 @@ def run_background_checks(db: Session, user_id: int) -> Dict[str, Any]:
 _scheduler = None  # singleton
 
 
+# Identificador arbitrário mas fixo do advisory lock. Precisa ser o mesmo em
+# todas as instâncias para que disputem o mesmo lock.
+_LOCK_DAILY_CHECK = 20260812
+
+
 def _daily_check():
     """
-    Executado pelo scheduler.  Roda `run_background_checks` para
+    Executado pelo scheduler. Roda `run_background_checks` para
     **todos** os user_ids que possuem propriedades cadastradas.
+
+    O scheduler sobe dentro do processo da aplicação, então com múltiplos
+    workers (`--workers N`) ou réplicas, esta função dispararia N vezes em
+    paralelo sobre as mesmas linhas — disputando o UPDATE de status e
+    multiplicando o trabalho. O advisory lock garante que apenas uma instância
+    execute; as demais desistem imediatamente.
     """
+    from sqlalchemy import text
+
     from src.database import SessionLocal
 
     db: Session = SessionLocal()
+    # Inicializado antes do try: o `finally` o consulta, e a própria aquisição
+    # do lock pode falhar.
+    obteve_lock = False
     try:
+        obteve_lock = bool(
+            db.execute(
+                text("SELECT pg_try_advisory_lock(:chave)"),
+                {"chave": _LOCK_DAILY_CHECK},
+            ).scalar()
+        )
+
+        if not obteve_lock:
+            logger.info("daily_check já em execução em outra instância — ignorando.")
+            return
+
         user_ids = [
             uid for (uid,) in db.query(Property.user_id).distinct().all()
         ]
@@ -138,6 +165,18 @@ def _daily_check():
                 logger.exception("  Erro ao processar user_id=%d", uid)
                 db.rollback()
     finally:
+        # Libera o lock explicitamente. Ele cairia junto com a conexão, mas
+        # com NullPool + PgBouncer a conexão pode ser reaproveitada, e um lock
+        # esquecido bloquearia a execução do dia seguinte.
+        try:
+            if obteve_lock:
+                db.execute(
+                    text("SELECT pg_advisory_unlock(:chave)"),
+                    {"chave": _LOCK_DAILY_CHECK},
+                )
+                db.commit()
+        except Exception:
+            logger.exception("Falha ao liberar o advisory lock do daily_check")
         db.close()
 
 

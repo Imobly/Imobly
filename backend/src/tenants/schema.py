@@ -62,6 +62,11 @@ class TenantRead(TenantBase):
     created_at: datetime
     updated_at: datetime
 
+    # Derivado do contrato vinculado, não armazenado (a coluna `tenants.status`
+    # foi removida). Sem este campo na resposta, o frontend lia `undefined` e
+    # exibia TODO inquilino como "inativo".
+    status: str = "inativo"
+
     class Config:
         from_attributes = True
 

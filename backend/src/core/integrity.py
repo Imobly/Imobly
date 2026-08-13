@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # SQLSTATE do Postgres
 _FOREIGN_KEY_VIOLATION = "23503"
 _UNIQUE_VIOLATION = "23505"
+_EXCLUSION_VIOLATION = "23P01"
 
 
 def _sqlstate(exc: IntegrityError) -> str | None:
@@ -36,6 +37,7 @@ def traduzir_erros_de_integridade(
     *,
     conflito_fk: str = "Registro não pode ser removido: existem dados vinculados a ele",
     conflito_unico: str = "Já existe um registro com estes dados",
+    conflito_exclusao: str = "A operação conflita com um registro existente",
 ):
     """
     Converte `IntegrityError` em `HTTPException` com o status adequado.
@@ -57,6 +59,10 @@ def traduzir_erros_de_integridade(
         if codigo == _UNIQUE_VIOLATION:
             logger.info("Violação de unicidade traduzida para 409: %s", exc.orig)
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=conflito_unico)
+
+        if codigo == _EXCLUSION_VIOLATION:
+            logger.info("Violação de exclusão traduzida para 409: %s", exc.orig)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=conflito_exclusao)
 
         # Qualquer outra violação é defeito de verdade — deixe estourar como 500
         # para não mascarar um problema real atrás de um 4xx.

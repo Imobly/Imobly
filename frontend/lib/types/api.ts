@@ -81,6 +81,12 @@ export interface TenantResponse extends TenantBase {
   user_id: number;
   created_at: string;
   updated_at: string;
+  /**
+   * Derivado do contrato vinculado — não é coluna do banco.
+   * A UI lia este campo antes de ele existir na API, e todo inquilino
+   * aparecia como "inativo".
+   */
+  status: 'ativo' | 'inativo';
 }
 
 // UNIDADES
