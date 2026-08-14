@@ -279,3 +279,108 @@ class TestValidacaoDeUpload:
         a = servico._generate_file_path(1, "properties", "foto.png")
         b = servico._generate_file_path(1, "properties", "foto.png")
         assert a != b
+
+
+class TestRateLimitAtivo:
+    """
+    A-01 — exercita as rotas com o rate limiting LIGADO.
+
+    A suíte roda com `RATE_LIMIT_ENABLED=false` para não esbarrar nos limites,
+    e isso escondeu um defeito: com `headers_enabled`, o slowapi exige um
+    parâmetro `response: Response` no endpoint decorado, e sem ele TODA
+    chamada a /auth/login respondia 500. O caminho só apareceu ao subir a
+    aplicação de verdade.
+    """
+
+    @pytest.fixture
+    def app_com_rate_limit(self, monkeypatch):
+        """
+        Reconstrói a app com o limiter ativo.
+
+        A ordem dos reloads importa: os decoradores `@limiter.limit` são
+        aplicados quando o ROUTER é importado, então recarregar só o módulo do
+        limiter deixa as rotas presas à instância antiga (desativada).
+        """
+        import importlib
+        import sys
+
+        # `import src.auth.router as ar` devolveria o objeto APIRouter, não o
+        # módulo: `src/auth/__init__.py` reexporta o nome `router`. Buscar em
+        # `sys.modules` garante que estamos recarregando o módulo certo.
+        nomes = ("src.core.rate_limit", "src.auth.router", "src.main")
+
+        def _recarregar():
+            for nome in nomes:
+                importlib.reload(sys.modules[nome])
+            return sys.modules["src.main"].app
+
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        yield _recarregar()
+
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
+        _recarregar()
+
+    def test_login_bem_sucedido_nao_quebra_com_rate_limit_ligado(
+        self, app_com_rate_limit
+    ):
+        """
+        Este é o teste que pega o defeito.
+
+        O slowapi injeta os cabeçalhos X-RateLimit-* SÓ no caminho de sucesso —
+        quando o endpoint retorna normalmente. Um login que falha levanta
+        HTTPException antes disso, então testar apenas credencial inválida
+        passa mesmo com a rota quebrada. Foi assim que o defeito escapou: sem
+        o parâmetro `response: Response`, todo login VÁLIDO respondia 500.
+        """
+        from src.auth.router import get_auth_repository
+
+        class _RepoFalso:
+            async def authenticate_user(self, email, senha):
+                return {
+                    "access_token": "token-de-teste",
+                    "refresh_token": "refresh-de-teste",
+                    "token_type": "Bearer",
+                }
+
+        app_com_rate_limit.dependency_overrides[get_auth_repository] = _RepoFalso
+        try:
+            cliente = TestClient(app_com_rate_limit)
+            r = cliente.post(
+                "/api/v1/auth/login",
+                json={"username": "valido@imobly.com.br", "password": "correta"},
+            )
+            assert r.status_code == 200, f"login válido quebrou: {r.status_code} {r.text}"
+            assert r.json()["access_token"] == "token-de-teste"
+            # Os cabeçalhos são justamente o que exige `response: Response`.
+            assert any(h.lower().startswith("x-ratelimit") for h in r.headers), (
+                "cabeçalhos de rate limit ausentes"
+            )
+        finally:
+            app_com_rate_limit.dependency_overrides.clear()
+
+    def test_credencial_invalida_devolve_401(self, app_com_rate_limit):
+        cliente = TestClient(app_com_rate_limit)
+        r = cliente.post(
+            "/api/v1/auth/login",
+            json={"username": "ninguem@imobly.com.br", "password": "errada"},
+        )
+        assert r.status_code != 500, f"rate limiting quebrou a rota: {r.text}"
+        assert r.status_code in (401, 429)
+
+    def test_refresh_nao_quebra_com_rate_limit_ligado(self, app_com_rate_limit):
+        cliente = TestClient(app_com_rate_limit)
+        r = cliente.post("/api/v1/auth/refresh", json={"refresh_token": "invalido"})
+        assert r.status_code != 500, f"rate limiting quebrou a rota: {r.text}"
+        assert r.status_code in (401, 429)
+
+    def test_excesso_de_tentativas_devolve_429(self, app_com_rate_limit):
+        cliente = TestClient(app_com_rate_limit)
+        codigos = [
+            cliente.post(
+                "/api/v1/auth/login",
+                json={"username": "alvo@imobly.com.br", "password": "errada"},
+            ).status_code
+            for _ in range(8)
+        ]
+        assert 429 in codigos, f"força bruta não foi bloqueada: {codigos}"
+        assert 500 not in codigos

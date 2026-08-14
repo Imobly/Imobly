@@ -64,7 +64,15 @@ _FKS = [
 
 
 def _recriar(constraint, tabela, coluna, tabela_ref, ondelete):
-    op.drop_constraint(constraint, tabela, type_="foreignkey")
+    """
+    Recria a FK com a política desejada.
+
+    Usa `DROP CONSTRAINT IF EXISTS` porque nem toda FK esperada existe no banco
+    real: `notifications_user_id_fkey`, por exemplo, é criada só na revisão
+    0003 (a tabela não tinha FK alguma). Sem o IF EXISTS, a migration quebraria
+    em bancos cujo schema divergiu do DDL de referência.
+    """
+    op.execute(f"ALTER TABLE {tabela} DROP CONSTRAINT IF EXISTS {constraint}")
     op.create_foreign_key(
         constraint,
         tabela,

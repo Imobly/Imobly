@@ -229,6 +229,31 @@ para dados reais.
 Os tokens também passam a ter o emissor (`iss`) validado contra
 `{SUPABASE_URL}/auth/v1`, o que impede aceitar um token de outro projeto.
 
+### Conflito de identidade (HTTP 409)
+
+Se um usuário for **apagado e recriado no Supabase Auth com o mesmo e-mail**,
+ele recebe um `supabase_uid` novo — mas a linha em `public.users` mantém o uid
+antigo. O backend detecta a divergência e responde **409** em vez de assumir
+que é a mesma pessoa; esse é o comportamento correto, porque tratar dois uids
+como a mesma conta abriria caminho para sequestro por reuso de e-mail.
+
+Para reativar a conta, alinhe (ou limpe) a linha local:
+
+```sql
+-- Ver a divergência
+SELECT id, email, supabase_uid FROM users WHERE email = 'usuario@exemplo.com';
+
+-- Opção A: apontar para a identidade nova (preserva os dados do usuário)
+UPDATE users SET supabase_uid = '<uid-novo-do-supabase>'
+ WHERE email = 'usuario@exemplo.com';
+
+-- Opção B: descartar a linha órfã (o backend recria no próximo login,
+-- mas os dados vinculados ao id antigo ficam sem dono)
+DELETE FROM users WHERE email = 'usuario@exemplo.com';
+```
+
+O log do backend registra os dois uids envolvidos (`Conflito de identidade`).
+
 ### Rate limiting
 
 `/auth/login`, `/auth/register`, `/auth/change-password` e `/auth/refresh` são

@@ -74,9 +74,12 @@ def _abort_se_houver_duplicatas() -> None:
 def upgrade() -> None:
     _abort_se_houver_duplicatas()
 
-    # Remove as constraints globais
-    op.drop_constraint("tenants_email_key", "tenants", type_="unique")
-    op.drop_constraint("tenants_cpf_cnpj_key", "tenants", type_="unique")
+    conn = op.get_bind()
+
+    # Remove as constraints globais (IF EXISTS: o nome pode divergir em bancos
+    # cujo schema foi criado fora do Alembic).
+    op.execute("ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_email_key")
+    op.execute("ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_cpf_cnpj_key")
 
     # Unicidade composta, por locador
     op.create_index(
@@ -92,12 +95,20 @@ def upgrade() -> None:
         unique=True,
     )
 
-    # Consultas de listagem sempre filtram por dono.
-    op.create_index("ix_tenants_user_id", "tenants", ["user_id"])
+    # Consultas de listagem sempre filtram por dono. O índice pode já existir
+    # no banco (criado fora do Alembic) — checar evita quebrar a migration.
+    ja_existe = conn.execute(
+        sa.text(
+            "SELECT 1 FROM pg_indexes "
+            "WHERE schemaname='public' AND indexname='ix_tenants_user_id'"
+        )
+    ).scalar()
+    if not ja_existe:
+        op.create_index("ix_tenants_user_id", "tenants", ["user_id"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_tenants_user_id", table_name="tenants")
+    op.execute("DROP INDEX IF EXISTS ix_tenants_user_id")
     op.drop_index("ux_tenants_user_cpf", table_name="tenants")
     op.drop_index("ux_tenants_user_email", table_name="tenants")
     op.create_unique_constraint("tenants_cpf_cnpj_key", "tenants", ["cpf_cnpj"])

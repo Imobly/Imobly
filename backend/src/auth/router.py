@@ -2,7 +2,7 @@
 Endpoints de autenticação
 """
 
-from fastapi import APIRouter, HTTPException, Request, status, Depends
+from fastapi import APIRouter, HTTPException, Request, Response, status, Depends
 from sqlalchemy.orm import Session
 from supabase import Client
 import logging
@@ -43,6 +43,7 @@ def get_auth_repository(
 @limiter.limit(LIMITE_LOGIN)
 async def login(
     request: Request,
+    response: Response,
     credentials: LoginRequest,
     auth_repo: AuthRepository = Depends(get_auth_repository)
 ):
@@ -83,6 +84,7 @@ async def login(
 @limiter.limit(LIMITE_REGISTRO)
 async def register(
     request: Request,
+    response: Response,
     user_data: RegisterRequest,
     auth_repo: AuthRepository = Depends(get_auth_repository)
 ):
@@ -190,6 +192,7 @@ async def update_current_user_profile(
 @limiter.limit(LIMITE_TROCA_SENHA)
 async def change_password(
     request: Request,
+    response: Response,
     password_data: ChangePasswordRequest,
     current_user: dict = Depends(get_current_user),
     auth_repo: AuthRepository = Depends(get_auth_repository)
@@ -223,6 +226,7 @@ async def logout():
 @limiter.limit(LIMITE_LOGIN)
 async def refresh_token(
     request: Request,
+    response: Response,
     data: RefreshRequest,
     auth_repo: AuthRepository = Depends(get_auth_repository),
 ):
