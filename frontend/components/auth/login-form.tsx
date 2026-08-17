@@ -3,10 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { useAuth } from '../../lib/contexts/auth';
 
 interface LoginFormProps {
@@ -27,7 +23,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (error) setError('');
   };
 
@@ -38,8 +34,7 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
 
     try {
       await login(formData);
-      
-      // Redireciona para a página salva ou dashboard
+
       const redirectTo = sessionStorage.getItem('redirectAfterLogin') || '/dashboard';
       sessionStorage.removeItem('redirectAfterLogin');
       router.push(redirectTo);
@@ -51,82 +46,84 @@ export function LoginForm({ onToggleMode }: LoginFormProps) {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Entrar</CardTitle>
-        <CardDescription>
-          Entre com suas credenciais para acessar o sistema
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="username">Email ou Usuário</Label>
-            <Input
-              id="username"
-              name="username"
-              type="text"
-              placeholder="seu@email.com ou usuario"
-              value={formData.username}
-              onChange={handleInputChange}
-              required
-              disabled={isLoading}
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
-            <div className="relative">
-              <Input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Digite sua senha"
-                value={formData.password}
-                onChange={handleInputChange}
-                required
-                disabled={isLoading}
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-          </div>
+    <div className="animate-fade-up [animation-delay:80ms]">
+      <h1 className="text-3xl font-bold tracking-tight text-gray-900">Bem-vindo de volta</h1>
+      <p className="mt-2 text-gray-500">Entre com suas credenciais para acessar a plataforma.</p>
 
-          {error && (
-            <div className="text-red-500 text-sm bg-red-50 p-3 rounded-md">
-              {error}
-            </div>
-          )}
-
-          <Button 
-            type="submit" 
-            className="w-full" 
+      <form onSubmit={handleSubmit} className="mt-9 space-y-5">
+        <div>
+          <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-gray-700">
+            Email ou usuário
+          </label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            required
+            value={formData.username}
+            onChange={handleInputChange}
             disabled={isLoading}
-          >
-            {isLoading ? 'Entrando...' : 'Entrar'}
-          </Button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Não tem uma conta?{' '}
-            <button
-              onClick={onToggleMode}
-              className="text-blue-600 hover:text-blue-800 font-medium underline"
-              type="button"
-            >
-              Criar conta
-            </button>
-          </p>
+            placeholder="seu@email.com ou usuario"
+            className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 outline-none transition-shadow focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          />
         </div>
-      </CardContent>
-    </Card>
+
+        <div>
+          <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-gray-700">
+            Senha
+          </label>
+          <div className="relative">
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              required
+              value={formData.password}
+              onChange={handleInputChange}
+              disabled={isLoading}
+              placeholder="Digite sua senha"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 text-gray-900 placeholder-gray-400 outline-none transition-shadow focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 transition-colors hover:text-gray-600"
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          </div>
+        </div>
+
+        {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-500">{error}</div>}
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-700 hover:shadow-blue-600/30 focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isLoading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+              Entrando...
+            </span>
+          ) : (
+            'Entrar'
+          )}
+        </button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-gray-500">
+        Não tem uma conta?{' '}
+        <button
+          onClick={onToggleMode}
+          type="button"
+          className="font-semibold text-blue-600 transition-colors hover:text-blue-700 hover:underline"
+        >
+          Criar conta
+        </button>
+      </p>
+    </div>
   );
 }
