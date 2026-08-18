@@ -48,8 +48,18 @@ RUN mkdir -p /app/uploads /app/logs && \
 
 EXPOSE 8000
 
-# Servidor com reload para desenvolvimento
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Servidor com reload para desenvolvimento.
+#
+# `--reload-dir src` limita o watcher ao código da aplicação. Sem isso o
+# uvicorn observa /app inteiro — incluindo alembic/, tests/, logs/ e scripts/ —
+# e sobre o compartilhamento de arquivos do Docker Desktop no Windows esse
+# volume de varredura satura a camada FUSE, que passa a devolver ENOMEM:
+#   WatchfilesRustInternalError: error in underlying watcher: Cannot allocate
+#   memory (os error 12)
+# Quando isso acontece o servidor continua respondendo, mas o hot reload morre
+# em silêncio — você edita o código e nada muda, sem nenhum erro visível.
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--reload", "--reload-dir", "src"]
 
 # -----------------------------------------------------------------------------
 # Stage: Testing - Para CI/CD e testes locais
