@@ -98,16 +98,23 @@ class Settings(BaseSettings):
         """
         Validações de inicialização (fail-fast). Chamada no startup da app.
 
-        O segredo JWT é obrigatório em TODOS os ambientes. Antes só era exigido
-        fora de desenvolvimento, e o PyJWT aceita HS256 com chave vazia: com
-        `SUPABASE_JWT_SECRET=""` qualquer pessoa forjava um token válido contra
-        o ambiente de dev — que costuma apontar para dados reais.
+        É preciso haver ALGUM jeito de validar assinatura de token:
+
+        • Projetos novos do Supabase assinam com chave assimétrica (ES256) e
+          publicam a pública no JWKS — basta `SUPABASE_URL`, não existe
+          segredo compartilhado.
+        • Projetos legados assinam com HS256 e exigem `SUPABASE_JWT_SECRET`.
+
+        Exigir o segredo incondicionalmente quebrava projetos assimétricos, que
+        legitimamente não têm um. Sem nenhum dos dois, porém, a aplicação não
+        consegue autenticar ninguém e deve falhar no startup — não em produção,
+        requisição a requisição.
         """
-        if not self.SUPABASE_JWT_SECRET:
+        if not self.SUPABASE_URL and not self.SUPABASE_JWT_SECRET:
             raise RuntimeError(
-                "SUPABASE_JWT_SECRET (ou SECRET_KEY) não configurado. "
-                "É obrigatório em todos os ambientes: sem ele, tokens forjados "
-                "com segredo vazio seriam aceitos."
+                "Nenhuma forma de validar tokens configurada: defina "
+                "SUPABASE_URL (projetos com assinatura assimétrica, via JWKS) "
+                "ou SUPABASE_JWT_SECRET (projetos legados, HS256)."
             )
 
 

@@ -17,6 +17,7 @@ from supabase import create_client, Client
 
 from src.config import settings
 from src.database import get_db
+from src.core.jwks import obter_chave_publica
 from src.core.supabase_storage_service import SupabaseStorageService
 import jwt
 import logging
@@ -59,31 +60,60 @@ async def verify_jwt_token(token: str) -> dict:
     Raises:
         HTTPException: Se o token for inválido
     """
-    if not settings.SUPABASE_JWT_SECRET:
-        # Defesa em profundidade: `validate_runtime` já barra isto no startup,
-        # mas nunca valide assinatura com chave vazia — o PyJWT aceita, e
-        # qualquer token forjado passaria.
-        logger.error("SUPABASE_JWT_SECRET ausente — recusando validar tokens.")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Servidor de autenticação mal configurado",
-        )
-
     try:
-        # Supabase usa HS256 com JWT_SECRET (não RS256/JWKS)
-        opcoes_de_verificacao = {"verify_exp": True}
+        # O Supabase tem DOIS modelos de assinatura, e qual está em uso depende
+        # de quando o projeto foi criado:
+        #
+        #   • Assimétrico (ES256/RS256) — padrão nos projetos novos. A chave
+        #     pública vem do JWKS do projeto; não existe segredo compartilhado.
+        #   • HS256 com `SUPABASE_JWT_SECRET` — projetos legados.
+        #
+        # O algoritmo é lido do cabeçalho do token, mas a lista de algoritmos
+        # aceitos é fixada por caminho: aceitar HS256 junto com ES256 na mesma
+        # chamada abriria a confusão clássica de algoritmo, em que um atacante
+        # assina com HMAC usando a chave PÚBLICA como segredo.
+        cabecalho = jwt.get_unverified_header(token)
+        algoritmo = cabecalho.get("alg", "")
         emissor = settings.jwt_issuer
 
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-            # Sem `issuer`, um token válido de outro projeto Supabase que
-            # compartilhasse o segredo seria aceito.
-            issuer=emissor,
-            options=opcoes_de_verificacao,
-        )
+        if algoritmo in ("ES256", "RS256"):
+            kid = cabecalho.get("kid")
+            if not kid:
+                raise jwt.InvalidTokenError("token assimétrico sem `kid`")
+
+            chave = obter_chave_publica(settings.SUPABASE_URL, kid)
+            if chave is None:
+                raise jwt.InvalidTokenError(f"nenhuma chave pública para kid={kid}")
+
+            payload = jwt.decode(
+                token,
+                chave,
+                algorithms=[algoritmo],
+                audience="authenticated",
+                issuer=emissor,
+                options={"verify_exp": True},
+            )
+        elif algoritmo == "HS256":
+            if not settings.SUPABASE_JWT_SECRET:
+                # Nunca valide assinatura com chave vazia: o PyJWT aceita, e
+                # qualquer token forjado passaria.
+                logger.error("Token HS256 recebido sem SUPABASE_JWT_SECRET configurado.")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Servidor de autenticação mal configurado",
+                )
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+                # Sem `issuer`, um token válido de outro projeto Supabase que
+                # compartilhasse o segredo seria aceito.
+                issuer=emissor,
+                options={"verify_exp": True},
+            )
+        else:
+            raise jwt.InvalidTokenError(f"algoritmo não suportado: {algoritmo}")
 
         return payload
 

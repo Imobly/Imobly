@@ -20,7 +20,12 @@ httpx==0.24.1
 
 # Validação de JWT. `python-jose` foi removido: estava declarado mas nunca
 # importado — só o PyJWT é usado (src/security.py).
-PyJWT>=2.8.0
+#
+# O extra `[crypto]` é OBRIGATÓRIO, não opcional: sem ele o PyJWT nem expõe
+# ES256/RS256, e projetos novos do Supabase assinam os tokens com ES256. Sem
+# o extra, o login funciona e TODA requisição autenticada depois dele
+# responde 401 — porque a chave pública do JWKS não pode ser carregada.
+PyJWT[crypto]>=2.8.0
 
 # Validação de dados e settings
 pydantic==2.5.0

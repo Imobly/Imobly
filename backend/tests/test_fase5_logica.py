@@ -47,16 +47,38 @@ def cenario(db_session, make_user):
 class TestConfiguracaoDeJWT:
     """M-01 — segredo vazio era aceito em dev e o emissor não era validado."""
 
-    def test_segredo_vazio_aborta_o_startup(self, monkeypatch):
+    def test_sem_nenhuma_forma_de_validar_token_aborta_o_startup(self):
         """
-        O PyJWT aceita HS256 com chave vazia: com o segredo em branco, qualquer
-        pessoa forjaria um token válido. Antes só era exigido fora de dev.
+        Sem SUPABASE_URL (JWKS) nem SUPABASE_JWT_SECRET (HS256), a aplicação
+        não consegue validar token nenhum e deve falhar no startup — não em
+        produção, requisição a requisição.
         """
         from src.config import Settings
 
-        cfg = Settings(SUPABASE_JWT_SECRET="", ENVIRONMENT="development")
-        with pytest.raises(RuntimeError, match="SUPABASE_JWT_SECRET"):
+        cfg = Settings(SUPABASE_JWT_SECRET="", SUPABASE_URL="", ENVIRONMENT="development")
+        with pytest.raises(RuntimeError, match="validar tokens"):
             cfg.validate_runtime()
+
+    def test_projeto_com_assinatura_assimetrica_dispensa_segredo(self):
+        """
+        Projetos novos do Supabase assinam com ES256 e publicam a chave pública
+        no JWKS: não existe segredo compartilhado, e exigir um quebrava esses
+        projetos no startup.
+        """
+        from src.config import Settings
+
+        cfg = Settings(
+            SUPABASE_JWT_SECRET="",
+            SUPABASE_URL="https://projeto.supabase.co",
+            ENVIRONMENT="production",
+        )
+        cfg.validate_runtime()  # não deve levantar
+
+    def test_projeto_legado_so_com_segredo_e_aceito(self):
+        from src.config import Settings
+
+        cfg = Settings(SUPABASE_JWT_SECRET="segredo-legado", SUPABASE_URL="")
+        cfg.validate_runtime()  # não deve levantar
 
     def test_emissor_derivado_da_url_do_supabase(self):
         from src.config import Settings
