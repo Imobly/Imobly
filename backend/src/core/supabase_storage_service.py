@@ -192,7 +192,7 @@ class SupabaseStorageService:
             )
 
             # Faz upload
-            response = self.storage.from_(self.BUCKET_NAME).upload(
+            self.storage.from_(self.BUCKET_NAME).upload(
                 path=file_path,
                 file=file_content,
                 file_options={
@@ -200,15 +200,12 @@ class SupabaseStorageService:
                     "upsert": "true"
                 }
             )
-            
-            logger.info(f"📤 Upload response: {response}")
-            
+
             # Gera URL pública
             public_url = self.storage.from_(self.BUCKET_NAME).get_public_url(file_path)
-            
-            logger.info(f"Arquivo enviado com sucesso: {file_path}")
-            logger.info(f"URL pública gerada: {public_url}")
-            
+
+            logger.debug("Arquivo enviado ao storage: %s", file_path)
+
             return {
                 "path": file_path,
                 "public_url": public_url

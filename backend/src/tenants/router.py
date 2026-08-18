@@ -14,6 +14,7 @@ from src.database import get_db
 from src.security import get_current_user_local_id, get_storage_service
 from src.core.integrity import traduzir_erros_de_integridade
 from src.core.ownership import assert_owned_optional
+from src.core.perf import marcar
 from src.core.supabase_storage_service import SupabaseStorageService
 from .repository import TenantRepository
 from .schema import TenantCreate, TenantResponse, TenantUpdate, TenantCreateInternal
@@ -61,25 +62,27 @@ def create_tenant(
     """Criar novo inquilino"""
     from src.contracts.models import Contract
 
+    marcar("autenticação + validação do payload (Pydantic)")
+
     # contract_id vem do cliente: impede vincular contrato de outro usuário.
     assert_owned_optional(db, Contract, tenant_data.contract_id, user_id)
+    marcar("checagem de posse do contrato")
 
-    # Verificar se email já existe
-    existing_tenant = repository.get_by_email(tenant_data.email, user_id)
-    if existing_tenant:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email já cadastrado para outro inquilino"
-        )
-    
-    # Verificar se CPF já existe
-    existing_cpf = repository.get_by_cpf(tenant_data.cpf_cnpj, user_id)
-    if existing_cpf:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CPF/CNPJ já cadastrado para outro inquilino"
-        )
-    
+    # Uma query só no lugar de duas: `get_by_email` e `get_by_cpf` eram dois
+    # round-trips sequenciais ao banco, e cada round-trip até o Supabase custa
+    # ~200ms de latência de rede. O resultado é o mesmo — a diferença é só
+    # qual mensagem de erro devolvemos.
+    duplicado = repository.get_by_email_or_cpf(
+        tenant_data.email, tenant_data.cpf_cnpj, user_id
+    )
+    marcar("checagem de duplicidade (e-mail/CPF)")
+    if duplicado:
+        if duplicado.email == tenant_data.email:
+            detalhe = "Email já cadastrado para outro inquilino"
+        else:
+            detalhe = "CPF/CNPJ já cadastrado para outro inquilino"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detalhe)
+
     # Criar schema interno com user_id
     data_dict = tenant_data.model_dump(exclude={'user_id'})
     tenant_create_internal = TenantCreateInternal(
@@ -98,6 +101,7 @@ def create_tenant(
             status_code=status.HTTP_409_CONFLICT,
             detail="Já existe um inquilino com este e-mail ou CPF/CNPJ",
         )
+    marcar("INSERT + commit no Supabase")
     return new_tenant
 
 
@@ -129,19 +133,24 @@ def update_tenant(
     """Atualizar inquilino"""
     from src.contracts.models import Contract
 
+    marcar("autenticação + validação do payload (Pydantic)")
+
     assert_owned_optional(db, Contract, tenant_data.contract_id, user_id)
+    marcar("checagem de posse do contrato")
 
     # Verificar se email novo já existe (se fornecido)
     if tenant_data.email:
         existing_tenant = repository.get_by_email(tenant_data.email, user_id)
+        marcar("checagem de duplicidade (e-mail)")
         if existing_tenant and existing_tenant.id != tenant_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email já cadastrado para outro inquilino"
             )
-    
+
     try:
         updated_tenant = repository.update(tenant_id, user_id, tenant_data)
+        marcar("UPDATE + commit no Supabase")
     except IntegrityError:
         db.rollback()
         raise HTTPException(

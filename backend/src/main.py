@@ -10,8 +10,14 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from src.config import settings
+from src.core.logging_config import configurar_logging
 from src.core.rate_limit import limiter
+from src.core.perf import PERF_ATIVO, middleware_de_perf
 from src.scheduler import start_scheduler, shutdown_scheduler
+
+# Antes de qualquer coisa que possa logar. Sem isto, o root logger fica em
+# WARNING e todo `logger.info` da aplicação é descartado sem aviso.
+configurar_logging(debug=settings.DEBUG)
 
 # Importar routers de todos os módulos
 from src.auth.router import router as auth_router
@@ -113,6 +119,16 @@ async def catch_exceptions_middleware(request: Request, call_next):
             content={"detail": "Erro interno do servidor"},
             headers=cors_headers,
         )
+
+
+# ── Medidor de performance ([PERF]) ──
+# Registrado por último de propósito: no Starlette o middleware adicionado por
+# último é o mais externo, então este envolve todos os outros e o "total da
+# rota" inclui CORS, rate limiting e serialização da resposta.
+# Só entra na pilha quando PERF_PROFILING=true — em produção não existe.
+if PERF_ATIVO:
+    app.middleware("http")(middleware_de_perf)
+    logger.info("[PERF] Profiling de requisições ATIVO (PERF_PROFILING=true)")
 
 
 # Criar diretório de uploads se não existir (fallback local de escrita)

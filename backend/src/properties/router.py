@@ -189,8 +189,6 @@ async def upload_property_images(
     import logging
     logger = logging.getLogger(__name__)
     
-    logger.info(f"📸 Iniciando upload de {len(images)} imagens para propriedade {property_id}")
-    
     # Verifica se a propriedade existe e pertence ao usuário
     property_obj = repository.get_by_id_and_user(property_id, user_id)
     if not property_obj:
@@ -213,20 +211,19 @@ async def upload_property_images(
             detail="Nenhuma imagem foi enviada com sucesso"
         )
     
-    logger.info(f"✅ Upload concluído. Arquivos enviados: {len(uploaded_files)}")
-    
     # Atualiza a propriedade com as URLs das imagens
     current_images = property_obj.images or []
     new_image_urls = [file["public_url"] for file in uploaded_files]
     updated_images = current_images + new_image_urls
     
-    logger.info(f"🔗 URLs das imagens: {new_image_urls}")
-    
     update_data = PropertyUpdate(images=updated_images)
     updated_property = repository.update(property_id, user_id, update_data)
     
-    logger.info(f"💾 Propriedade atualizada com {len(updated_images)} imagens no total")
-    
+    logger.info(
+        "Upload concluído: %s imagens adicionadas à propriedade %s (%s no total)",
+        len(uploaded_files), property_id, len(updated_images),
+    )
+
     return {
         "message": f"{len(uploaded_files)} imagens enviadas com sucesso",
         "images": new_image_urls,

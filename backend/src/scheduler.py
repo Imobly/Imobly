@@ -295,7 +295,7 @@ def start_scheduler():
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
     except ImportError:
-        logger.warning("⚠️  APScheduler não instalado — scheduler desativado.")
+        logger.warning("APScheduler não instalado — scheduler desativado.")
         return
 
     if _scheduler is not None:
@@ -310,7 +310,7 @@ def start_scheduler():
         replace_existing=True,
     )
     _scheduler.start()
-    logger.info("✅ Scheduler iniciado — daily_check às 06:00 BRT")
+    logger.info("Scheduler iniciado — daily_check às 06:00 BRT")
 
 
 def shutdown_scheduler():
@@ -319,4 +319,4 @@ def shutdown_scheduler():
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
-        logger.info("🛑 Scheduler encerrado")
+        logger.info("Scheduler encerrado")

@@ -13,6 +13,7 @@ from src.database import get_db
 from src.security import get_current_user_local_id
 from src.core.integrity import traduzir_erros_de_integridade
 from src.core.ownership import assert_owned, assert_owned_optional
+from src.core.perf import marcar
 from .repository import ContractRepository
 from .schema import ContractCreate, ContractCreateInternal, ContractResponse, ContractUpdate
 
@@ -83,11 +84,14 @@ def create_contract(
     from src.properties.models import Property
     from src.tenants.models import Tenant
 
+    marcar("autenticação + validação do payload (Pydantic)")
+
     # property_id/tenant_id vêm do cliente: sem esta guarda era possível criar
     # um contrato sobre o imóvel de outro usuário — e o bloco abaixo alterava
     # o status desse imóvel alheio.
     assert_owned(db, Property, contract_data.property_id, user_id)
     assert_owned(db, Tenant, contract_data.tenant_id, user_id)
+    marcar("checagem de posse (imóvel + inquilino)")
 
     internal = ContractCreateInternal(
         **contract_data.model_dump(),
@@ -111,6 +115,7 @@ def create_contract(
                 prop.tenant_id = new_contract.tenant_id
 
             db.commit()
+            marcar("INSERT contrato + UPDATE imóvel + commit no Supabase")
         except IntegrityError:
             raise  # tratado pelo contexto acima (rollback incluído)
         except Exception:
@@ -118,6 +123,7 @@ def create_contract(
             raise
 
     db.refresh(new_contract)
+    marcar("refresh do contrato criado")
     return new_contract
 
 

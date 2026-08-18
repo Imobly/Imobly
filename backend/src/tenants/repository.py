@@ -64,6 +64,33 @@ class TenantRepository:
             .first()
         )
 
+    def get_by_email_or_cpf(
+        self, email: str, cpf_cnpj: str, user_id: int
+    ) -> Optional[Tenant]:
+        """
+        Buscar inquilino que colida no e-mail OU no CPF/CNPJ, em UMA query.
+
+        Existe para o caminho de criação, que antes chamava `get_by_email` e
+        `get_by_cpf` em sequência: dois round-trips ao banco onde um resolve.
+        Com o Postgres em outra região, cada round-trip evitado vale ~200ms.
+
+        O `lower()` no e-mail acompanha o índice único `ux_tenants_user_email`,
+        que é sobre `lower(email)`.
+        """
+        from sqlalchemy import func, or_
+
+        return (
+            self.db.query(Tenant)
+            .filter(
+                Tenant.user_id == user_id,
+                or_(
+                    func.lower(Tenant.email) == (email or "").lower(),
+                    Tenant.cpf_cnpj == cpf_cnpj,
+                ),
+            )
+            .first()
+        )
+
     def create(self, tenant_data: TenantCreateInternal) -> Tenant:
         """Criar um novo inquilino"""
         db_tenant = Tenant(**tenant_data.model_dump())
