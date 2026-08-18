@@ -44,7 +44,7 @@ export function usePayments(filters?: PaymentFilters): UsePaymentsReturn {
       await invalidateRelated()
       return true
     } catch (err) {
-      console.error('❌ Erro ao confirmar pagamento:', err)
+      console.error('Erro ao confirmar pagamento:', err)
       return false
     }
   }
@@ -55,7 +55,7 @@ export function usePayments(filters?: PaymentFilters): UsePaymentsReturn {
       await invalidateRelated()
       return newPayment
     } catch (err) {
-      console.error('❌ Erro ao criar pagamento:', err)
+      console.error('Erro ao criar pagamento:', err)
       return null
     }
   }
@@ -66,7 +66,7 @@ export function usePayments(filters?: PaymentFilters): UsePaymentsReturn {
       await invalidateRelated()
       return true
     } catch (err) {
-      console.error('❌ Erro ao excluir pagamento:', err)
+      console.error('Erro ao excluir pagamento:', err)
       return false
     }
   }

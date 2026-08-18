@@ -40,7 +40,7 @@ export function useContracts(filters?: ContractFilters): UseContractsReturn {
       await globalMutate((k: string) => typeof k === 'string' && k.startsWith('/dashboard'), undefined, { revalidate: true })
       return newContract
     } catch (err) {
-      console.error('❌ Erro ao criar contrato:', err)
+      console.error('Erro ao criar contrato:', err)
       throw err
     }
   }
@@ -55,5 +55,19 @@ export function useContracts(filters?: ContractFilters): UseContractsReturn {
     error: swrError ? handleApiError(swrError) : null,
     refetch,
     createContract,
+  }
+}
+
+// Hook para buscar um contrato específico (ex: ao editar um inquilino vinculado)
+export function useContract(id?: number | null) {
+  const { data, error: swrError, isLoading } = useSWR<ContractResponse>(
+    id ? `${CONTRACTS_KEY}/${id}` : null,
+    () => ApiService.contracts.getContract(id as number),
+  )
+
+  return {
+    contract: data ?? null,
+    loading: isLoading,
+    error: swrError ? handleApiError(swrError) : null,
   }
 }

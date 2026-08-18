@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ProtectedRoute } from '@/components/auth/protected-route';
-import { DashboardLayout } from '@/components/dashboard-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -123,8 +121,6 @@ export default function SettingsPage() {
   };
 
   return (
-    <ProtectedRoute>
-      <DashboardLayout>
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Header */}
           <div className="flex items-center gap-3">
@@ -398,7 +394,5 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    </ProtectedRoute>
   );
 }

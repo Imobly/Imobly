@@ -76,9 +76,6 @@ export function TenantsView() {
 
   const handleSave = async (tenantData: any) => {
     try {
-      console.log("💾 Salvando inquilino:", tenantData)
-      console.log("📤 Payload do inquilino:", JSON.stringify(tenantData, null, 2))
-      
       // Separar dados do contrato dos dados do inquilino
       const { contract, contract_id, ...tenantOnly } = tenantData
 
@@ -96,17 +93,12 @@ export function TenantsView() {
       }
       // ────────────────────────────────────────────────────────────────────────
 
-      console.log("📋 Dados do contrato separados:", JSON.stringify(contract, null, 2))
-      console.log("👤 Dados do inquilino (sanitizado):", JSON.stringify(tenantOnly, null, 2))
-      
       let savedTenant: any
       let savedContract: any = null
       
       // Validar se tem dados de contrato preenchidos
       const hasContractData = contract && contract.property_id && contract.title && contract.start_date && contract.end_date
-      
-      console.log("❓ Tem dados de contrato?", hasContractData)
-      
+
       if (selectedTenant) {
         // MODO EDIÇÃO: Atualizar inquilino existente
         
@@ -130,14 +122,12 @@ export function TenantsView() {
             if (selectedTenant.contract_id) {
               // Atualizar contrato existente
               savedContract = await ApiService.contracts.updateContract(selectedTenant.contract_id, contractData)
-              console.log("✅ Contrato atualizado:", savedContract)
             } else {
               // Criar novo contrato para inquilino existente
               savedContract = await ApiService.contracts.createContract(contractData)
-              console.log("✅ Contrato criado:", savedContract)
             }
           } catch (contractError: any) {
-            console.error('⚠️ Erro ao salvar contrato:', contractError)
+            console.error('Erro ao salvar contrato:', contractError)
             throw new Error(`Erro ao salvar contrato: ${contractError.detail || contractError.message}`)
           }
         }
@@ -154,8 +144,6 @@ export function TenantsView() {
         if (!savedTenant) {
           throw new Error('Falha ao atualizar inquilino. Verifique os dados e tente novamente.')
         }
-        console.log("✅ Inquilino atualizado:", savedTenant)
-        
       } else {
         // MODO CRIAÇÃO: Criar novo inquilino
         
@@ -165,8 +153,6 @@ export function TenantsView() {
         if (!savedTenant) {
           throw new Error('Falha ao criar inquilino. Verifique os dados e tente novamente.')
         }
-        console.log("✅ Inquilino criado:", savedTenant)
-        
         // Se tem dados de contrato, criar contrato COM o tenant_id agora
         if (hasContractData && savedTenant?.id) {
           try {
@@ -185,15 +171,13 @@ export function TenantsView() {
             }
             
             savedContract = await ApiService.contracts.createContract(contractData)
-            console.log("✅ Contrato criado:", savedContract)
-            
+
             // Atualizar inquilino com contract_id
             await updateTenant(savedTenant.id, {
               contract_id: savedContract.id
             })
-            console.log("✅ Inquilino vinculado ao contrato")
           } catch (contractError: any) {
-            console.error('⚠️ Erro ao criar contrato:', contractError)
+            console.error('Erro ao criar contrato:', contractError)
             // Não falha a operação, inquilino já foi criado
             toast.error(`Inquilino criado mas erro ao criar contrato: ${contractError.detail || contractError.message}`)
           }
@@ -202,8 +186,11 @@ export function TenantsView() {
       
       setShowDialog(false)
       setSelectedTenant(null)
-      await refetch()
-      
+      // Sem `await refetch()` aqui: `createTenant`/`updateTenant` já gravaram
+      // no cache do SWR a resposta real da API, e os campos derivados são
+      // revalidados em segundo plano pelo próprio hook. Este refetch era um
+      // GET /tenants completo que o usuário esperava com a tela travada.
+
       if (savedContract) {
         toast.success('Inquilino e contrato salvos com sucesso!')
       } else {
@@ -212,7 +199,7 @@ export function TenantsView() {
 
       return savedTenant
     } catch (error: any) {
-      console.error('❌ Erro ao salvar inquilino:', error)
+      console.error('Erro ao salvar inquilino:', error)
       toast.error(`Erro ao salvar: ${error.message || 'Verifique os dados e tente novamente.'}`)
     }
   }

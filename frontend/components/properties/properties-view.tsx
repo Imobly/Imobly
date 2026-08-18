@@ -96,16 +96,13 @@ export function PropertiesView() {
   const handleSave = async (propertyData: PropertyDraft) => {
     // Converter dados do formulário para formato da API
     const apiData = convertPropertyToApi(propertyData)
-    console.log("💾 Salvando propriedade:", apiData)
 
     // May throw — let the dialog's handleSubmit catch it
     let savedProperty
     if (selectedProperty) {
       savedProperty = await updateProperty(selectedProperty.id, apiData)
-      console.log("✅ Propriedade atualizada:", savedProperty)
     } else {
       savedProperty = await createProperty(apiData)
-      console.log("✅ Propriedade criada:", savedProperty)
     }
 
     // Do NOT close the dialog or refetch here.

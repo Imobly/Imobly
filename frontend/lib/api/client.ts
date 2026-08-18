@@ -32,20 +32,10 @@ class ApiClient {
           }
         }
         
-        // Log da requisição em desenvolvimento
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`🚀 [API Request] ${config.method?.toUpperCase()} ${config.url}`)
-          if (config.data) {
-            console.log('📦 [Request Data]', config.data)
-          }
-          if (config.headers['Authorization']) {
-            console.log('🔐 [Auth Token]', 'Present')
-          }
-        }
         return config
       },
       (error) => {
-        console.error('❌ [Request Error]', error)
+        console.error('[API] Erro ao montar a requisição:', error)
         return Promise.reject(error)
       }
     )
@@ -53,18 +43,13 @@ class ApiClient {
     // Interceptor para respostas
     this.client.interceptors.response.use(
       (response: AxiosResponse) => {
-        // Log da resposta em desenvolvimento
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`✅ [API Response] ${response.status} ${response.config.url}`)
-          console.log('📦 [Response Data]', response.data)
-        }
         return response
       },
       async (error) => {
         // Log de erro (só em desenvolvimento — o objeto inclui headers da
         // requisição, entre eles o Authorization)
         if (process.env.NODE_ENV === 'development') {
-          console.error('❌ [API Error]', error)
+          console.error('[API] Erro na requisição:', error)
         }
 
         // Tratamento de erros customizado

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from "react"
+import { mutate } from "swr"
 import {
   Dialog,
   DialogContent,
@@ -19,8 +20,10 @@ import { Upload, X, Loader2, FileText } from "lucide-react"
 import { apiClient } from "@/lib/api/client"
 import { phoneMask, cpfCnpjMask, cpfCnpjUnmask, currencyMask, currencyUnmask, percentageMask, percentageUnmask, integerMask } from "@/lib/utils/masks"
 import { tenantsService } from "@/lib/api/tenants"
+import { useContract } from "@/lib/hooks/useContracts"
 import { useAuth } from "@/lib/contexts/auth"
 import { toast } from "sonner"
+import type { ContractResponse } from "@/lib/types/api"
 
 interface TenantFormData {
   name: string
@@ -90,8 +93,110 @@ const initialTenant: TenantFormData = {
   },
 }
 
+// Deriva o formData inicial a partir do tenant + contrato já resolvidos.
+// Só é chamada como initializer do useState (uma vez por montagem), então
+// nunca corre risco de "sobrescrever" dados carregados de forma assíncrona.
+function buildInitialFormData(tenant: any | null | undefined, contract: ContractResponse | null): TenantFormData {
+  if (!tenant) return initialTenant
+
+  return {
+    name: tenant.name || "",
+    email: tenant.email || "",
+    phone: tenant.phone || "",
+    cpf_cnpj: tenant.cpf_cnpj || "",
+    birth_date: tenant.birth_date || null,
+    profession: tenant.profession || "",
+    emergency_contact: tenant.emergency_contact || {
+      name: "",
+      phone: "",
+      relationship: "",
+    },
+    documents: tenant.documents || [],
+    contract_id: tenant.contract_id,
+    contract: contract
+      ? {
+          title: contract.title || "",
+          property_id: contract.property_id || null,
+          start_date: contract.start_date || "",
+          end_date: contract.end_date || "",
+          rent: contract.rent?.toString() || "",
+          deposit: contract.deposit?.toString() || "",
+          interest_rate: contract.interest_rate?.toString() || "",
+          fine_rate: contract.fine_rate?.toString() || "",
+          due_day: contract.due_day?.toString() || "",
+          status: contract.status || "ativo",
+        }
+      : initialTenant.contract,
+  }
+}
+
 export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialogProps) {
-  const [formData, setFormData] = useState<TenantFormData>(initialTenant)
+  // Busca o contrato via SWR — nada de fetch manual solto num useEffect.
+  const contractId = tenant?.contract_id ?? null
+  const { contract, loading: loadingContract, error: contractError } = useContract(contractId)
+
+  // "Pronto" cobre os três casos: criação (sem tenant), edição sem contrato
+  // vinculado, e edição com contrato — mas só depois que o SWR resolveu
+  // (com sucesso OU erro; um erro não deve travar o formulário para sempre).
+  const isReady = !tenant || !contractId || !loadingContract
+
+  useEffect(() => {
+    if (contractError) {
+      toast.error('Não foi possível carregar os dados do contrato. Você pode editar o inquilino sem eles.')
+    }
+  }, [contractError])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{tenant ? "Editar Inquilino" : "Novo Inquilino"}</DialogTitle>
+          <DialogDescription>
+            {tenant ? "Edite as informações do inquilino." : "Adicione um novo inquilino ao sistema."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {isReady ? (
+          <TenantDialogForm
+            // `key` força o React a descartar o estado do formulário anterior
+            // e montar uma instância nova a cada troca de inquilino — é isso
+            // que elimina a janela em que o formData do item antigo ficava
+            // visível enquanto o contrato do novo ainda carregava.
+            key={tenant?.id ?? "new"}
+            tenant={tenant}
+            contract={contractError ? null : contract}
+            onOpenChange={onOpenChange}
+            onSave={async (data) => {
+              const savedTenant = await onSave(data)
+              // Usa o contract_id do TENANT SALVO (não o do `data` submetido):
+              // cobre tanto a atualização de um contrato já existente quanto
+              // o caso em que o contrato acabou de ser criado durante este save.
+              if (savedTenant?.contract_id) {
+                await mutate(`/contracts/${savedTenant.contract_id}`)
+              }
+              return savedTenant
+            }}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-3 py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Carregando dados do contrato...</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface TenantDialogFormProps {
+  tenant?: any | null
+  contract: ContractResponse | null
+  onOpenChange: (open: boolean) => void
+  onSave: (tenant: TenantFormData) => Promise<any>
+}
+
+function TenantDialogForm({ tenant, contract, onOpenChange, onSave }: TenantDialogFormProps) {
+  const [formData, setFormData] = useState<TenantFormData>(() => buildInitialFormData(tenant, contract))
   const [isLoading, setIsLoading] = useState(false)
   const [properties, setProperties] = useState<any[]>([])
   const [loadingProperties, setLoadingProperties] = useState(false)
@@ -101,21 +206,22 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
   const [selectedDocType, setSelectedDocType] = useState<'rg' | 'cpf' | 'cnh' | 'comprovante_residencia' | 'comprovante_renda' | 'contrato' | 'outros'>('rg')
   const [pendingDocFiles, setPendingDocFiles] = useState<{ files: File[], docType: string }[]>([])
   const { user } = useAuth()
-  const isEditLoadRef = useRef(false)
+  // No mount, formData já nasce com o aluguel certo (vindo do contrato
+  // carregado); esse efeito só deve agir quando o USUÁRIO trocar o imóvel
+  // selecionado depois — daí o guard no primeiro disparo.
+  const skipAutoFillRef = useRef(true)
 
-  // Carregar propriedades ao abrir o dialog
+  // O Dialog do Radix desmonta este componente ao fechar (sem forceMount),
+  // então "montou" already means "acabou de abrir" — um efeito de montagem
+  // único já cobre o que antes dependia de `open`.
   useEffect(() => {
-    if (open) {
-      loadProperties()
-      setPendingDocFiles([])
-    }
-  }, [open])
+    loadProperties()
+  }, [])
 
   // Preencher automaticamente o valor do aluguel quando uma propriedade for selecionada
   useEffect(() => {
-    // Ignorar durante carregamento de dados de edição
-    if (isEditLoadRef.current) {
-      isEditLoadRef.current = false
+    if (skipAutoFillRef.current) {
+      skipAutoFillRef.current = false
       return
     }
 
@@ -126,7 +232,7 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
         // Formatar o valor do aluguel no formato brasileiro
         const rentValue = selectedProperty.rent.toString().replace('.', ',')
         const formattedRent = currencyMask(rentValue)
-        
+
         // Atualizar o valor do aluguel no contrato
         setFormData(prev => ({
           ...prev,
@@ -137,8 +243,6 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
             rent: formattedRent
           }
         }))
-        
-        console.log(`💰 Aluguel preenchido automaticamente: R$ ${formattedRent}`)
       }
     }
   }, [formData.contract?.property_id, properties])
@@ -155,89 +259,6 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
       setLoadingProperties(false)
     }
   }
-
-  useEffect(() => {
-    if (tenant) {
-      // Marcar que estamos carregando dados de edição (previne auto-fill de aluguel)
-      isEditLoadRef.current = true
-      // Função para carregar contrato se contract_id existir
-      const loadContractData = async () => {
-        if (tenant.contract_id) {
-          try {
-            const contract = await apiClient.get<any>(`/contracts/${tenant.contract_id}`)
-            setFormData({
-              name: tenant.name || "",
-              email: tenant.email || "",
-              phone: tenant.phone || "",
-              cpf_cnpj: tenant.cpf_cnpj || "",
-              birth_date: tenant.birth_date || null,
-              profession: tenant.profession || "",
-              emergency_contact: tenant.emergency_contact || {
-                name: "",
-                phone: "",
-                relationship: "",
-              },
-              documents: tenant.documents || [],
-              contract_id: tenant.contract_id,
-              contract: {
-                title: contract.title || "",
-                property_id: contract.property_id || null,
-                start_date: contract.start_date || "",
-                end_date: contract.end_date || "",
-                rent: contract.rent?.toString() || "",
-                deposit: contract.deposit?.toString() || "",
-                interest_rate: contract.interest_rate?.toString() || "",
-                fine_rate: contract.fine_rate?.toString() || "",
-                due_day: contract.due_day?.toString() || "",
-                status: contract.status || "ativo",
-              },
-            })
-          } catch (error) {
-            console.error("Erro ao carregar contrato:", error)
-            // Se falhar, carregar sem contrato
-            setFormData({
-              name: tenant.name || "",
-              email: tenant.email || "",
-              phone: tenant.phone || "",
-              cpf_cnpj: tenant.cpf_cnpj || "",
-              birth_date: tenant.birth_date || null,
-              profession: tenant.profession || "",
-              emergency_contact: tenant.emergency_contact || {
-                name: "",
-                phone: "",
-                relationship: "",
-              },
-              documents: tenant.documents || [],
-              contract_id: tenant.contract_id,
-              contract: initialTenant.contract,
-            })
-          }
-        } else {
-          // Sem contract_id
-          setFormData({
-            name: tenant.name || "",
-            email: tenant.email || "",
-            phone: tenant.phone || "",
-            cpf_cnpj: tenant.cpf_cnpj || "",
-            birth_date: tenant.birth_date || null,
-            profession: tenant.profession || "",
-            emergency_contact: tenant.emergency_contact || {
-              name: "",
-              phone: "",
-              relationship: "",
-            },
-            documents: tenant.documents || [],
-            contract_id: undefined,
-            contract: initialTenant.contract,
-          })
-        }
-      }
-      
-      loadContractData()
-    } else {
-      setFormData(initialTenant)
-    }
-  }, [tenant])
 
   const validateForm = (): boolean => {
     // Validar campos obrigatórios conforme backend TenantBase
@@ -317,7 +338,6 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
     setIsLoading(true)
     
     try {
-      console.log("💾 Salvando inquilino:", formData)
       const savedTenant = await onSave(formData)
 
       // Upload pending documents after tenant is saved
@@ -521,17 +541,8 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{tenant ? "Editar Inquilino" : "Novo Inquilino"}</DialogTitle>
-          <DialogDescription>
-            {tenant ? "Edite as informações do inquilino." : "Adicione um novo inquilino ao sistema."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit}>
-          <Tabs defaultValue="personal" className="w-full">
+    <form onSubmit={handleSubmit}>
+      <Tabs defaultValue="personal" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="personal">Dados Pessoais</TabsTrigger>
               <TabsTrigger value="contract">Contrato</TabsTrigger>
@@ -971,16 +982,14 @@ export function TenantDialog({ open, onOpenChange, tenant, onSave }: TenantDialo
             </TabsContent>
           </Tabs>
 
-          <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Salvando..." : tenant ? "Salvar Alterações" : "Criar Inquilino"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter className="mt-6">
+        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? "Salvando..." : tenant ? "Salvar Alterações" : "Criar Inquilino"}
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }

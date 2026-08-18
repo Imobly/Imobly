@@ -43,7 +43,7 @@ export function useProperties(filters?: PropertyFilters): UsePropertiesReturn {
       await invalidateRelated()
       return newProperty
     } catch (err) {
-      console.error('❌ Erro ao criar propriedade:', err)
+      console.error('Erro ao criar propriedade:', err)
       throw err
     }
   }
@@ -54,7 +54,7 @@ export function useProperties(filters?: PropertyFilters): UsePropertiesReturn {
       await invalidateRelated()
       return updatedProperty
     } catch (err) {
-      console.error('❌ Erro ao atualizar propriedade:', err)
+      console.error('Erro ao atualizar propriedade:', err)
       throw err
     }
   }
@@ -65,7 +65,7 @@ export function useProperties(filters?: PropertyFilters): UsePropertiesReturn {
       await invalidateRelated()
       return true
     } catch (err) {
-      console.error('❌ Erro ao deletar propriedade:', err)
+      console.error('Erro ao deletar propriedade:', err)
       throw err
     }
   }

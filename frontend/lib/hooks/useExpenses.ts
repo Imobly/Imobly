@@ -44,7 +44,7 @@ export function useExpenses(filters?: ExpenseFilters): UseExpensesReturn {
       await invalidateRelated()
       return newExpense
     } catch (err) {
-      console.error('❌ Erro ao criar despesa:', err)
+      console.error('Erro ao criar despesa:', err)
       throw err
     }
   }
@@ -55,7 +55,7 @@ export function useExpenses(filters?: ExpenseFilters): UseExpensesReturn {
       await invalidateRelated()
       return updatedExpense
     } catch (err) {
-      console.error('❌ Erro ao atualizar despesa:', err)
+      console.error('Erro ao atualizar despesa:', err)
       throw err
     }
   }
@@ -66,7 +66,7 @@ export function useExpenses(filters?: ExpenseFilters): UseExpensesReturn {
       await invalidateRelated()
       return true
     } catch (err) {
-      console.error('❌ Erro ao deletar despesa:', err)
+      console.error('Erro ao deletar despesa:', err)
       return false
     }
   }

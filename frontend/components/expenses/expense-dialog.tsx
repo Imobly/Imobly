@@ -121,7 +121,6 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
     setIsLoading(true)
 
     try {
-      console.log("💾 Salvando despesa:", formData)
       await onSave(formData)
     } finally {
       setIsLoading(false)

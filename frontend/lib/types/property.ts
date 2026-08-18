@@ -133,8 +133,6 @@ export const convertPropertyToApi = (property: PropertyFormData): Partial<Proper
     is_residential: property.isResidential ?? property.is_residential ?? false,
     tenant_id: property.tenant_id ?? null
   }
-  
-  console.log('🔄 [convertPropertyToApi] Dados convertidos:', JSON.stringify(apiData, null, 2))
-  
+
   return apiData
 }

@@ -95,41 +95,116 @@ export function useTenants(filters?: TenantFilters): UseTenantsReturn {
     })
   }, [tenantsData, contractsData, propertiesData])
 
-  const invalidateRelated = async () => {
-    await mutateTenants()
-    await globalMutate((k: string) => typeof k === 'string' && k.startsWith('/dashboard'), undefined, { revalidate: true })
+  /**
+   * Revalida em SEGUNDO PLANO os caches que derivam de inquilinos.
+   *
+   * Deliberadamente sem `await`: antes, `invalidateRelated` era aguardado
+   * dentro de cada mutação, então salvar um inquilino só retornava depois de
+   * um GET /tenants completo + a revalidação do dashboard. Com o banco em
+   * us-west-2, isso somava round-trips que o usuário esperava olhando spinner.
+   * O cache da lista já foi atualizado com a resposta real da API — estas
+   * revalidações só existem para campos derivados (status vindo do contrato,
+   * agregados do dashboard) e podem chegar alguns instantes depois.
+   */
+  const revalidarDerivados = () => {
+    globalMutate(
+      (k: string) => typeof k === 'string' && (k.startsWith('/dashboard') || k === '/contracts'),
+      undefined,
+      { revalidate: true },
+    ).catch(() => {
+      // Revalidação de segundo plano: uma falha aqui não deve virar
+      // unhandled rejection nem incomodar o usuário — a mutação principal
+      // já foi confirmada pela API. O SWR tentará de novo no próximo acesso.
+    })
   }
 
   const createTenant = async (tenant: any): Promise<TenantResponse | null> => {
+    // Registro provisório mostrado na hora. O id negativo nunca colide com um
+    // id real do Postgres (sempre positivo), então se algo der errado no meio
+    // do caminho a entrada fantasma é identificável.
+    const otimista = {
+      ...tenant,
+      id: -Date.now(),
+      status: 'inativo',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as TenantResponse
+
+    let criado: TenantResponse | null = null
     try {
-      const newTenant = await ApiService.tenants.createTenant(tenant)
-      await invalidateRelated()
-      return newTenant
+      await mutateTenants(
+        async (atual) => {
+          criado = await ApiService.tenants.createTenant(tenant)
+          // Troca o provisório pelo registro real devolvido pela API.
+          return [...(atual ?? []), criado]
+        },
+        {
+          optimisticData: (atual) => [...(atual ?? []), otimista],
+          // Se o POST falhar, o SWR restaura sozinho a lista anterior.
+          rollbackOnError: true,
+          // A resposta da API já é a verdade — não precisamos de um GET extra.
+          populateCache: true,
+          revalidate: false,
+        },
+      )
+      revalidarDerivados()
+      return criado
     } catch (err) {
-      console.error('❌ Erro ao criar inquilino:', err)
+      console.error('Erro ao criar inquilino:', err)
       throw err
     }
   }
 
   const updateTenant = async (id: number, tenant: any): Promise<TenantResponse | null> => {
+    let atualizado: TenantResponse | null = null
     try {
-      const updatedTenant = await ApiService.tenants.updateTenant(id, tenant)
-      await invalidateRelated()
-      return updatedTenant
+      await mutateTenants(
+        async (atual) => {
+          atualizado = await ApiService.tenants.updateTenant(id, tenant)
+          return (atual ?? []).map(t => (t.id === id ? atualizado! : t))
+        },
+        {
+          // Mescla os campos enviados sobre o registro em cache: a UI reflete
+          // a edição imediatamente, sem esperar o round-trip.
+          optimisticData: (atual) =>
+            (atual ?? []).map(t => (t.id === id ? { ...t, ...tenant } : t)),
+          rollbackOnError: true,
+          populateCache: true,
+          revalidate: false,
+        },
+      )
+      revalidarDerivados()
+      return atualizado
     } catch (err) {
-      console.error('❌ Erro ao atualizar inquilino:', err)
+      console.error('Erro ao atualizar inquilino:', err)
       throw err
     }
   }
 
   const deleteTenant = async (id: number): Promise<boolean> => {
     try {
-      await ApiService.tenants.deleteTenant(id)
-      await invalidateRelated()
+      await mutateTenants(
+        async (atual) => {
+          await ApiService.tenants.deleteTenant(id)
+          return (atual ?? []).filter(t => t.id !== id)
+        },
+        {
+          optimisticData: (atual) => (atual ?? []).filter(t => t.id !== id),
+          rollbackOnError: true,
+          populateCache: true,
+          revalidate: false,
+        },
+      )
+      revalidarDerivados()
       return true
     } catch (err) {
-      console.error('❌ Erro ao deletar inquilino:', err)
-      return false
+      // Propaga em vez de devolver `false`. Devolvendo false, quem chamava não
+      // entrava no `catch` e exibia "deletado com sucesso" mesmo quando o
+      // backend recusava a exclusão (ex.: inquilino com contrato vinculado) —
+      // e agora, com a linha reaparecendo pelo rollback, a mensagem errada
+      // ficaria ainda mais confusa.
+      console.error('Erro ao deletar inquilino:', err)
+      throw err
     }
   }
 

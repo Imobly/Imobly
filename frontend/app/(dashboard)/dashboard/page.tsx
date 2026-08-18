@@ -1,8 +1,6 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ProtectedRoute } from '../../components/auth/protected-route'
-import { DashboardLayout } from '../../components/dashboard-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
@@ -274,8 +272,6 @@ export default function DashboardPage() {
     : `${MONTH_NAMES[parseInt(filterMonth) - 1]}/${filterYear}`
 
   return (
-    <ProtectedRoute>
-      <DashboardLayout>
       <div className="container mx-auto px-4 py-6 space-y-10">
         {/* Título */}
         <div className="flex items-center justify-between">
@@ -639,7 +635,5 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
-      </DashboardLayout>
-    </ProtectedRoute>
   )
 }

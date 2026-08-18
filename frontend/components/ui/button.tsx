@@ -35,16 +35,13 @@ const buttonVariants = cva(
   },
 )
 
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  ...props
-}: React.ComponentProps<'button'> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-  }) {
+const Button = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<'button'> &
+    VariantProps<typeof buttonVariants> & {
+      asChild?: boolean
+    }
+>(({ className, variant, size, asChild = false, ...props }, ref) => {
   // `React.ElementType`: sem a anotação, o union `Slot | 'button'` faz o TS
   // tentar reconciliar os tipos de `ref` dos dois e reprovar o spread.
   const Comp: React.ElementType = asChild ? Slot : 'button'
@@ -53,9 +50,11 @@ function Button({
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      ref={ref}
       {...props}
     />
   )
-}
+})
+Button.displayName = 'Button'
 
 export { Button, buttonVariants }

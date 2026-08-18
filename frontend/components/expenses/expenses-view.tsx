@@ -86,21 +86,17 @@ export function ExpensesView() {
 
   const handleSave = async (expenseData: any) => {
     try {
-      console.log("💾 Salvando despesa:", expenseData)
-      
       if (selectedExpense) {
-        const result = await updateExpense(selectedExpense.id, expenseData)
-        console.log("✅ Despesa atualizada:", result)
+        await updateExpense(selectedExpense.id, expenseData)
       } else {
-        const result = await createExpense(expenseData)
-        console.log("✅ Despesa criada:", result)
+        await createExpense(expenseData)
       }
       
       setShowDialog(false)
       setSelectedExpense(null)
       await refetch()
     } catch (error) {
-      console.error('❌ Erro ao salvar despesa:', error)
+      console.error('Erro ao salvar despesa:', error)
     }
   }
 

@@ -42,7 +42,7 @@ export class ApiService {
       await generalService.getRoot()
       return true
     } catch (error) {
-      console.error('❌ Falha na conexão com a API:', error)
+      console.error('Falha na conexão com a API:', error)
       return false
     }
   }
@@ -52,7 +52,7 @@ export class ApiService {
     try {
       return await generalService.getRoot()
     } catch (error) {
-      console.error('❌ Falha ao obter informações da API:', error)
+      console.error('Falha ao obter informações da API:', error)
       return null
     }
   }

@@ -44,7 +44,7 @@ export function useNotifications(filters?: NotificationFilters): UseNotification
       await mutate()
       return newNotification
     } catch (err) {
-      console.error('❌ Erro ao criar notificação:', err)
+      console.error('Erro ao criar notificação:', err)
       return null
     }
   }
@@ -62,7 +62,7 @@ export function useNotifications(filters?: NotificationFilters): UseNotification
       )
       return true
     } catch (err) {
-      console.error('❌ Erro ao marcar notificação como lida:', err)
+      console.error('Erro ao marcar notificação como lida:', err)
       return false
     }
   }
@@ -80,7 +80,7 @@ export function useNotifications(filters?: NotificationFilters): UseNotification
       )
       return true
     } catch (err) {
-      console.error('❌ Erro ao marcar todas como lidas:', err)
+      console.error('Erro ao marcar todas como lidas:', err)
       return false
     }
   }
@@ -99,7 +99,7 @@ export function useNotifications(filters?: NotificationFilters): UseNotification
       )
       return true
     } catch (err) {
-      console.error('❌ Erro ao deletar notificação:', err)
+      console.error('Erro ao deletar notificação:', err)
       return false
     }
   }
