@@ -25,6 +25,7 @@ from src.properties.router import router as properties_router
 from src.tenants.router import router as tenants_router
 from src.contracts.router import router as contracts_router
 from src.payments.router import router as payments_router
+from src.charges.router import router as charges_router
 from src.expenses.router import router as expenses_router
 from src.dashboard.router import router as dashboard_router
 from src.notifications.router import router as notifications_router
@@ -147,6 +148,7 @@ app.include_router(properties_router, prefix="/api/v1/properties", tags=["proper
 app.include_router(tenants_router, prefix="/api/v1/tenants", tags=["tenants"])
 app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["contracts"])
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["payments"])
+app.include_router(charges_router, prefix="/api/v1/charges", tags=["charges"])
 app.include_router(expenses_router, prefix="/api/v1/expenses", tags=["expenses"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])

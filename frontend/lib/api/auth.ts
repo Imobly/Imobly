@@ -18,6 +18,7 @@ interface UserResponse {
   full_name?: string | null
   created_at?: string
   updated_at?: string | null
+  supabase_uid?: string | null
 }
 
 function toUser(data: UserResponse): User {
@@ -27,6 +28,7 @@ function toUser(data: UserResponse): User {
     name: data.full_name || data.username || data.email,
     created_at: data.created_at,
     updated_at: data.updated_at ?? undefined,
+    supabase_uid: data.supabase_uid ?? undefined,
   }
 }
 

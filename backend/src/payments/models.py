@@ -1,5 +1,15 @@
 """
-Modelos SQLAlchemy para pagamentos
+Modelo SQLAlchemy da tabela `payments` — LEGADO, sem escrita.
+
+A aplicação não grava mais aqui desde a revisão 0012: cobrança e recebimento
+viraram `charges` + `payment_entries` (ver `src/charges/models.py`), porque uma
+linha só não conseguia representar um aluguel de 1.000 pago em duas parcelas de
+600 e 400.
+
+A tabela continua no banco como rede de segurança da migração, e o modelo
+continua mapeado para que o Alembic e os testes enxerguem o schema real. A
+remoção de ambos fica para depois que os dados convertidos estiverem conferidos
+em produção.
 """
 
 from datetime import datetime

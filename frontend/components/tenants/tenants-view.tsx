@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { ApiService } from "@/lib/api"
 import { TenantList } from "@/components/tenants/tenant-list"
 import { toast } from "sonner"
+import { toNumber } from '@/lib/utils/format'
 
 export function TenantsView() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -111,10 +112,13 @@ export function TenantsView() {
               tenant_id: selectedTenant.id,
               start_date: contract.start_date,
               end_date: contract.end_date,
-              rent: parseFloat(contract.rent.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
-              deposit: parseFloat(contract.deposit.replace(/[^\d,]/g, '').replace(',', '.')) || 0,
-              interest_rate: parseFloat((contract.interest_rate || '').replace(',', '.')) || 0,
-              fine_rate: parseFloat((contract.fine_rate || '').replace(',', '.')) || 0,
+              // `toNumber` no lugar do parse artesanal: o antigo assumia `,`
+              // como decimal e, numa máquina en-US (onde a máscara escreve
+              // "1,234.56"), truncava o aluguel de 1.234,56 para 1,234.
+              rent: toNumber(contract.rent),
+              deposit: toNumber(contract.deposit),
+              interest_rate: toNumber(contract.interest_rate),
+              fine_rate: toNumber(contract.fine_rate),
               due_day: contract.due_day ? parseInt(contract.due_day, 10) : undefined,
               status: contract.status || 'ativo',
             }

@@ -21,6 +21,24 @@ const nextConfig = {
     ],
   },
   
+  // NÃO REMOVA — sem isto o proxy de API abaixo devolve 404 em massa.
+  //
+  // O backend roda com `redirect_slashes=False` (src/main.py) e as rotas de
+  // listagem são declaradas como `@router.get("/")`, então a barra final é
+  // obrigatória: `/api/v1/tenants/` responde 200 e `/api/v1/tenants` responde
+  // 404. O frontend monta as URLs com a barra corretamente.
+  //
+  // O problema é que o Next, no default, redireciona 308 para remover a barra
+  // final ANTES de aplicar o rewrite — o backend recebe a URL sem barra e
+  // devolve 404. Sintoma: Imóveis, Inquilinos, Pagamentos e Despesas quebram
+  // com "Not Found", enquanto Dashboard e Configurações funcionam, porque as
+  // rotas delas não terminam em barra.
+  //
+  // Ligar `redirect_slashes=True` no backend não resolve: o 307 dele aponta de
+  // volta para a URL com barra, que o Next redireciona de novo para sem barra
+  // — loop infinito.
+  skipTrailingSlashRedirect: true,
+
   // API Rewrites - only in development
   async rewrites() {
     if (process.env.NODE_ENV === 'production') {
@@ -28,6 +46,12 @@ const nextConfig = {
     }
     
     return [
+      // A regra com barra final vem primeiro: o `:path*` da regra genérica
+      // descarta a barra ao reconstruir a URL, e o backend precisa dela.
+      {
+        source: '/api/v1/:path*/',
+        destination: 'http://imobly-backend:8000/api/v1/:path*/',
+      },
       {
         source: '/api/v1/:path*',
         destination: 'http://imobly-backend:8000/api/v1/:path*',

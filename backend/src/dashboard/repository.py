@@ -13,9 +13,10 @@ from sqlalchemy import func, extract, and_, case
 # Importar os models dos outros módulos
 from src.properties.models import Property
 from src.tenants.models import Tenant  
-from src.payments.models import Payment
 from src.expenses.models import Expense
 from src.contracts.models import Contract
+from src.charges.models import Charge, PaymentEntry
+from src.charges.repository import ChargeRepository
 
 from src.core.tempo import hoje_brt
 
@@ -73,45 +74,32 @@ class DashboardRepository:
         }
 
     def get_financial_stats(self, user_id: int) -> Dict[str, Any]:
-        """Obter estatísticas financeiras — 2 queries ao invés de 4"""
+        """
+        KPIs financeiros.
+
+        Receita é a soma dos RECEBIMENTOS do mês — dinheiro que entrou, com
+        data própria. Antes era `SUM(payments.total_amount) WHERE status='pago'`,
+        e essa coluna guardava ora o valor pago, ora o devido, conforme o
+        caminho que criou a linha.
+
+        A vencer e vencido saem do aging, ou seja, do SALDO de cada cobrança já
+        com multa e juros do dia, e não do valor de face.
+        """
         hoje = hoje_brt()
         current_month = hoje.month
         current_year = hoje.year
 
-        # Uma única query com agregação condicional para os três KPIs de pagamento
-        result = (
-            self.db.query(
-                func.sum(
-                    case(
-                        (
-                            and_(
-                                Payment.status == "pago",
-                                extract("month", Payment.payment_date) == current_month,
-                                extract("year", Payment.payment_date) == current_year,
-                            ),
-                            Payment.total_amount,
-                        ),
-                        else_=0,
-                    )
-                ).label("monthly_income"),
-                func.sum(
-                    case(
-                        (Payment.status == "pendente", Payment.total_amount),
-                        else_=0,
-                    )
-                ).label("pending_payments"),
-                func.sum(
-                    case(
-                        (Payment.status == "atrasado", Payment.total_amount),
-                        else_=0,
-                    )
-                ).label("overdue_payments"),
+        monthly_income = (
+            self.db.query(func.sum(PaymentEntry.amount))
+            .filter(
+                PaymentEntry.user_id == user_id,
+                extract("month", PaymentEntry.date) == current_month,
+                extract("year", PaymentEntry.date) == current_year,
             )
-            .filter(Payment.user_id == user_id)
-            .first()
+            .scalar()
+            or Decimal("0")
         )
 
-        # Despesas do mês (tabela separada — mantemos 1 query)
         monthly_expenses = (
             self.db.query(func.sum(Expense.amount))
             .filter(
@@ -123,10 +111,14 @@ class DashboardRepository:
             or Decimal("0")
         )
 
-        monthly_income = Decimal(str(result.monthly_income or 0))
-        pending_payments = Decimal(str(result.pending_payments or 0))
-        overdue_payments = Decimal(str(result.overdue_payments or 0))
+        baldes = ChargeRepository(self.db).aging(user_id, hoje=hoje)
+        pending_payments = baldes["a_vencer"]["amount"]
+        overdue_payments = sum(
+            (dados["amount"] for nome, dados in baldes.items() if nome != "a_vencer"),
+            Decimal("0"),
+        )
 
+        monthly_income = Decimal(str(monthly_income))
         return {
             "monthly_income": float(monthly_income),
             "monthly_expenses": float(monthly_expenses),
@@ -147,21 +139,21 @@ class DashboardRepository:
             start_year -= 1
         start_date = date(start_year, start_month, 1)
 
-        # 1 query para receitas agrupadas por ano/mês
+        # 1 query para receitas agrupadas por ano/mês — sobre os recebimentos,
+        # que é onde a data e o valor do dinheiro que entrou realmente estão.
         revenue_rows = (
             self.db.query(
-                extract("year", Payment.payment_date).label("year"),
-                extract("month", Payment.payment_date).label("month"),
-                func.sum(Payment.total_amount).label("total"),
+                extract("year", PaymentEntry.date).label("year"),
+                extract("month", PaymentEntry.date).label("month"),
+                func.sum(PaymentEntry.amount).label("total"),
             )
             .filter(
-                Payment.user_id == user_id,
-                Payment.status == "pago",
-                Payment.payment_date >= start_date,
+                PaymentEntry.user_id == user_id,
+                PaymentEntry.date >= start_date,
             )
             .group_by(
-                extract("year", Payment.payment_date),
-                extract("month", Payment.payment_date),
+                extract("year", PaymentEntry.date),
+                extract("month", PaymentEntry.date),
             )
             .all()
         )
@@ -256,13 +248,14 @@ class DashboardRepository:
         current_month = today.month
         current_year = today.year
 
+        # Dinheiro efetivamente recebido no mês — um recebimento parcial entra
+        # pelo valor que entrou, e não pelo valor cheio da cobrança.
         receitas_pagas = (
-            self.db.query(func.sum(Payment.total_amount))
+            self.db.query(func.sum(PaymentEntry.amount))
             .filter(
-                Payment.user_id == user_id,
-                Payment.status == "pago",
-                extract("month", Payment.payment_date) == current_month,
-                extract("year", Payment.payment_date) == current_year,
+                PaymentEntry.user_id == user_id,
+                extract("month", PaymentEntry.date) == current_month,
+                extract("year", PaymentEntry.date) == current_year,
             )
             .scalar() or Decimal("0")
         )
@@ -317,62 +310,58 @@ class DashboardRepository:
             "vencendo_90d": alertas.d90 if alertas else 0,
         }
 
-        # ── inadimplencia — JOIN Payment + Tenant + Property ──
-        delinquent_rows = (
-            self.db.query(
-                Payment.tenant_id,
-                Tenant.name.label("tenant_name"),
-                Payment.property_id,
-                Property.name.label("property_name"),
-                Payment.total_amount.label("amount"),
-                Payment.due_date,
-                Payment.status,
-            )
-            # O predicado de dono vai NO JOIN, não só no WHERE do Payment:
-            # um pagamento com FK apontando para entidade de terceiro passaria
-            # a expor nome de inquilino e de imóvel alheios.
-            .join(
-                Tenant,
-                and_(Payment.tenant_id == Tenant.id, Tenant.user_id == user_id),
-            )
-            .join(
-                Property,
-                and_(Payment.property_id == Property.id, Property.user_id == user_id),
-            )
-            .filter(
-                Payment.user_id == user_id,
-                Payment.status.in_(["atrasado", "parcial"]),
-            )
-            .order_by(Payment.due_date.asc())
-            .limit(100)
-            .all()
-        )
+        # ── inadimplencia — a partir das cobranças, pelo SALDO ──
+        # A versão anterior lia `Payment.total_amount` como "valor devido",
+        # mas em registro parcial essa coluna guardava o valor PAGO: quem
+        # pagasse 600 de 1.000 aparecia no painel devendo 600. Agora o número
+        # é o saldo calculado — 400 mais multa e juros do dia.
+        charge_repo = ChargeRepository(self.db)
+        linhas = charge_repo.resumo_inadimplencia(user_id, hoje=today, limite=100)
 
         atrasados: List[Dict[str, Any]] = []
         parciais: List[Dict[str, Any]] = []
-        for row in delinquent_rows:
+        for linha in linhas:
             item = {
-                "tenant_id": row.tenant_id,
-                "tenant_name": row.tenant_name,
-                "property_id": row.property_id,
-                "property_name": row.property_name,
-                "amount": float(row.amount),
-                "due_date": row.due_date,
-                "status": row.status,
+                "tenant_id": linha["tenant_id"],
+                "tenant_name": linha["tenant_name"],
+                "property_id": linha["property_id"],
+                "property_name": linha["property_name"],
+                "amount": float(linha["balance"]),
+                "due_date": linha["oldest_due_date"],
+                "status": "atrasado" if linha["days_overdue"] > 0 else "parcial",
+                "days_overdue": linha["days_overdue"],
+                "situacao": linha["situacao"],
+                "open_charges": linha["open_charges"],
             }
-            if row.status == "atrasado":
-                atrasados.append(item)
-            else:
-                parciais.append(item)
+            # Uma linha por INQUILINO, não por cobrança. Quem deve três meses
+            # aparecia três vezes e o operador somava de cabeça.
+            (atrasados if item["days_overdue"] > 0 else parciais).append(item)
 
         inadimplencia = {
             "atrasados": atrasados,
             "parciais": parciais,
         }
 
+        # ── aging — vencidos por faixa, o relatório padrão do setor ──
+        baldes = charge_repo.aging(user_id, hoje=today)
+        aging = {
+            "a_vencer": float(baldes["a_vencer"]["amount"]),
+            "d1_30": float(baldes["d1_30"]["amount"]),
+            "d31_60": float(baldes["d31_60"]["amount"]),
+            "d61_90": float(baldes["d61_90"]["amount"]),
+            "d90_mais": float(baldes["d90_mais"]["amount"]),
+        }
+        total_em_aberto = sum(aging.values())
+        total_vencido = total_em_aberto - aging["a_vencer"]
+
         return {
             "overview": overview,
             "financeiro": financeiro,
             "alertas_contratos": alertas_contratos,
             "inadimplencia": inadimplencia,
+            "aging": {
+                **aging,
+                "total_open": total_em_aberto,
+                "total_overdue": total_vencido,
+            },
         }

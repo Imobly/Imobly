@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Upload, X, Loader2, FileText } from "lucide-react"
 import { apiClient } from "@/lib/api/client"
 import { phoneMask, cpfCnpjMask, cpfCnpjUnmask, currencyMask, currencyUnmask, percentageMask, percentageUnmask, integerMask } from "@/lib/utils/masks"
+import { toNumber } from "@/lib/utils/format"
 import { tenantsService } from "@/lib/api/tenants"
 import { useContract } from "@/lib/hooks/useContracts"
 import { useAuth } from "@/lib/contexts/auth"
@@ -229,9 +230,9 @@ function TenantDialogForm({ tenant, contract, onOpenChange, onSave }: TenantDial
     if (propertyId && properties.length > 0) {
       const selectedProperty = properties.find(p => p.id === propertyId)
       if (selectedProperty && selectedProperty.rent) {
-        // Formatar o valor do aluguel no formato brasileiro
-        const rentValue = selectedProperty.rent.toString().replace('.', ',')
-        const formattedRent = currencyMask(rentValue)
+        // `currencyMask` já normaliza o que vier da API (decimal canônico)
+        // para o separador da máquina — não é preciso pré-traduzir o ponto.
+        const formattedRent = currencyMask(selectedProperty.rent)
 
         // Atualizar o valor do aluguel no contrato
         setFormData(prev => ({
@@ -312,7 +313,7 @@ function TenantDialogForm({ tenant, contract, onOpenChange, onSave }: TenantDial
           toast.error('Data de término do contrato é obrigatória')
           return false
         }
-        if (!contract.rent || contract.rent.trim() === '' || parseFloat(contract.rent.replace(/[^\d,]/g, '').replace(',', '.')) <= 0) {
+        if (!contract.rent || contract.rent.trim() === '' || toNumber(contract.rent) <= 0) {
           toast.error('Valor do aluguel deve ser maior que zero')
           return false
         }
@@ -351,7 +352,7 @@ function TenantDialogForm({ tenant, contract, onOpenChange, onSave }: TenantDial
               savedTenant.id,
               pending.files,
               pending.docType as any,
-              user!.id,
+              user!.supabase_uid ?? '',
               savedTenant.documents || [],
               (progress) => setUploadProgress(progress)
             )
@@ -423,7 +424,7 @@ function TenantDialogForm({ tenant, contract, onOpenChange, onSave }: TenantDial
         tenant.id,
         fileArray,
         selectedDocType,
-        user!.id,
+        user!.supabase_uid ?? '',
         formData.documents || [],
         (progress) => setUploadProgress(progress)
       )

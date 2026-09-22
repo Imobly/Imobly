@@ -87,6 +87,18 @@ export interface TenantResponse extends TenantBase {
    * aparecia como "inativo".
    */
   status: 'ativo' | 'inativo';
+  /**
+   * Situação financeira — derivada das cobranças em aberto.
+   *
+   * `status` responde "tem contrato vigente?"; estes campos respondem "está
+   * pagando?", que é a pergunta da gestão de carteira e antes exigia abrir a
+   * página de pagamentos e somar de cabeça.
+   */
+  situacao_financeira?: 'em_dia' | 'atraso_leve' | 'inadimplente' | 'critico';
+  /** Já com multa e juros do dia. */
+  saldo_devedor?: number;
+  dias_atraso?: number;
+  cobrancas_em_aberto?: number;
 }
 
 // UNIDADES

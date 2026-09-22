@@ -45,3 +45,8 @@ class UserResponse(BaseModel):
     full_name: Optional[str] = None
     created_at: str
     updated_at: Optional[str] = None
+    # UID do Supabase Auth, distinto do `id` acima (que é o da tabela local).
+    # O frontend precisa dele para montar o caminho dos uploads no Storage: as
+    # policies de RLS comparam a primeira pasta com `auth.uid()`, então usar o
+    # id local ali faz todo upload ser negado.
+    supabase_uid: Optional[str] = None

@@ -1,5 +1,6 @@
 // Import tipos da API para compatibilidade
 import { PropertyResponse, UnitResponse } from './api'
+import { toNumber } from '@/lib/utils/format'
 
 export interface Unit {
   id: number
@@ -89,12 +90,17 @@ export const convertApiToProperty = (apiProperty: PropertyResponse): Property =>
   zipCode: apiProperty.zip_code,
   zip_code: apiProperty.zip_code,
   type: apiProperty.type,
-  area: apiProperty.area,
-  bedrooms: apiProperty.bedrooms,
-  bathrooms: apiProperty.bathrooms,
-  parkingSpaces: apiProperty.parking_spaces,
-  parking_spaces: apiProperty.parking_spaces,
-  rent: apiProperty.rent,
+  // `Decimal` do Pydantic chega no JSON como STRING ("600.0"), não como
+  // número. Sem esta coerção, `rent.toLocaleString()` devolvia a string crua
+  // ("600.0" na listagem) e a máscara do formulário lia os dígitos como
+  // centavos (R$ 60,00 na edição) — dois números diferentes para o mesmo
+  // aluguel.
+  area: toNumber(apiProperty.area),
+  bedrooms: toNumber(apiProperty.bedrooms),
+  bathrooms: toNumber(apiProperty.bathrooms),
+  parkingSpaces: toNumber(apiProperty.parking_spaces),
+  parking_spaces: toNumber(apiProperty.parking_spaces),
+  rent: toNumber(apiProperty.rent),
   status: apiProperty.status,
   description: apiProperty.description,
   images: apiProperty.images,
@@ -107,12 +113,15 @@ export const convertApiToProperty = (apiProperty: PropertyResponse): Property =>
 })
 
 export const convertPropertyToApi = (property: PropertyFormData): Partial<PropertyResponse> => {
-  // Garantir que valores numéricos estejam no formato correto
-  const area = typeof property.area === 'string' ? parseFloat(property.area) : property.area
-  const bedrooms = typeof property.bedrooms === 'string' ? parseInt(property.bedrooms) : property.bedrooms
-  const bathrooms = typeof property.bathrooms === 'string' ? parseInt(property.bathrooms) : property.bathrooms
-  const parkingSpaces = typeof property.parkingSpaces === 'string' ? parseInt(property.parkingSpaces) : (property.parkingSpaces || property.parking_spaces || 0)
-  const rent = typeof property.rent === 'string' ? parseFloat(property.rent) : property.rent
+  // A API só aceita número canônico. `toNumber` cobre tanto o que o
+  // formulário produz (texto no separador da máquina, "85,5") quanto o que
+  // veio da própria API (decimal canônico, "85.5") — `parseFloat` truncava o
+  // primeiro caso em 85.
+  const area = toNumber(property.area)
+  const bedrooms = Math.trunc(toNumber(property.bedrooms))
+  const bathrooms = Math.trunc(toNumber(property.bathrooms))
+  const parkingSpaces = Math.trunc(toNumber(property.parkingSpaces ?? property.parking_spaces ?? 0))
+  const rent = toNumber(property.rent)
   
   const apiData = {
     name: property.name,

@@ -70,7 +70,7 @@ export class ExpensesService {
     uploaded_files: ExpenseDocument[]
     total_documents: number
   }> {
-    // 1. Upload direto ao Supabase → bucket private-documents
+    // 1. Upload direto ao Supabase → bucket expense-documents
     const results = await storageUploadDocs(files, expenseId, userId, onProgress)
 
     // 2. Construir objetos ExpenseDocument
@@ -97,7 +97,7 @@ export class ExpensesService {
 
   // Gerar URL temporária para visualizar documento privado
   async getDocumentSignedUrl(path: string): Promise<string> {
-    return getSignedUrl(path)
+    return getSignedUrl(path, 'expense-documents')
   }
 
   // Deletar documento da despesa
@@ -111,7 +111,7 @@ export class ExpensesService {
   }> {
     // 1. Deletar do Supabase Storage
     try {
-      await deleteFile(documentPath, 'private-documents')
+      await deleteFile(documentPath, 'expense-documents')
     } catch {
       // Se falhar a exclusão do storage, continua removendo do DB
     }
@@ -156,7 +156,7 @@ export class ExpensesService {
     message: string
   }> {
     try {
-      await deleteFile(receiptPath, 'private-documents')
+      await deleteFile(receiptPath, 'expense-documents')
     } catch {
       // Se falhar a exclusão do storage, continua
     }

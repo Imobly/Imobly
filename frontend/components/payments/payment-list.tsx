@@ -7,6 +7,7 @@ import { Edit, Trash2, Building2, User, AlertTriangle } from "lucide-react"
 import { Payment } from "@/lib/types/payment"
 import { useProperties } from "@/lib/hooks/useProperties"
 import { useTenants } from "@/lib/hooks/useTenants"
+import { formatCurrency, formatDate } from '@/lib/utils/format'
 
 interface PaymentListProps {
   payments: Payment[]
@@ -25,22 +26,10 @@ export function PaymentList({ payments, onEdit, onDelete }: PaymentListProps) {
   const { properties } = useProperties()
   const { tenants } = useTenants()
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(amount)
-  }
 
-  const getDaysOverdue = (dueDate: string) => {
-    const today = new Date()
-    const due = new Date(dueDate)
-    const diffTime = today.getTime() - due.getTime()
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  }
   const formatDateBRShort = (dateStr: string) => {
     const d = new Date(dateStr)
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })
+    return formatDate(d, { day: "2-digit", month: "2-digit", year: "2-digit" })
   }
 
   const getProperty = (payment: Payment) => {
@@ -99,10 +88,10 @@ export function PaymentList({ payments, onEdit, onDelete }: PaymentListProps) {
                 </TableCell>
                 <TableCell>
                   <div className="text-sm">{formatDateBRShort(payment.dueDate)}</div>
-                  {payment.status === "atrasado" && (
+                  {payment.daysOverdue > 0 && payment.balanceAmount > 0 && (
                     <div className="text-xs text-red-600 flex items-center mt-1">
                       <AlertTriangle className="h-3 w-3 mr-1" />
-                      {getDaysOverdue(payment.dueDate)} dias em atraso
+                      {payment.daysOverdue} dias em atraso
                     </div>
                   )}
                 </TableCell>
@@ -125,6 +114,13 @@ export function PaymentList({ payments, onEdit, onDelete }: PaymentListProps) {
                 </TableCell>
                 <TableCell>
                   <div className="text-sm font-semibold">{formatCurrency(payment.totalAmount)}</div>
+                  {payment.balanceAmount > 0 ? (
+                    <div className="text-xs text-red-600">
+                      saldo {formatCurrency(payment.balanceAmount)}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-green-700">quitado</div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge 

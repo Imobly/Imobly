@@ -9,7 +9,19 @@ services:
     container_name: imobly-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      # `127.0.0.1:` explícito, não `"8000:8000"`.
+      #
+      # Sem host à esquerda, o Docker publica em AMBAS as pilhas —
+      # `0.0.0.0:8000` E `[::]:8000` (`docker port` confirma as duas). No
+      # Docker Desktop para Windows o lado IPv6 aceita a conexão TCP e trava
+      # para sempre sem devolver um byte: `curl` resolve `localhost` para
+      # `::1`, o handshake completa, e a requisição HTTP nunca recebe
+      # resposta — sem erro, sem timeout de conexão, só silêncio indefinido.
+      # Já `127.0.0.1` (IPv4) responde em ~20ms. Como a ordem de resolução de
+      # `localhost` entre IPv6/IPv4 varia por processo, o mesmo endereço
+      # funciona numa aba do navegador e trava noutra — sintoma relatado como
+      # "a página não carrega de jeito nenhum", sem nada nos logs do container.
+      - "127.0.0.1:8000:8000"
     env_file:
       - ./backend/.env
     volumes:
@@ -38,7 +50,10 @@ services:
     container_name: imobly-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Mesmo motivo do backend: só IPv4. Sem isto o Next.js dev server
+      # some por trás do listener IPv6 fantasma do Docker Desktop no Windows
+      # — ver o comentário completo na porta do backend acima.
+      - "127.0.0.1:3000:3000"
     env_file:
       - ./frontend/.env
     environment:
@@ -60,7 +75,20 @@ services:
     volumes:
       - ./frontend:/app:rw
       - /app/node_modules
-      - /app/.next
+      # Volume NOMEADO, não anônimo.
+      #
+      # Um volume anônimo (`/app/.next`, sem nome) morre junto com o
+      # container: todo `docker compose down` + `up` zera o cache de build do
+      # Next.js, e o `next dev` precisa recompilar da estaca zero TODAS as
+      # rotas no primeiro acesso de cada uma — em vez de segundos, cada rota
+      # nova leva 10-30s+. É exatamente essa varredura pesada em disco,
+      # multiplicada pelo número de rotas, que satura a camada de
+      # compartilhamento de arquivos do Docker Desktop no Windows e produz os
+      # picos de `ENOMEM: not enough memory, scandir '/app/app'` no cold
+      # start (ver docker-compose.yml de antes desta mudança / commit
+      # 60af187). Um volume nomeado sobrevive ao `down` e faz reinícios
+      # seguintes carregarem o cache incremental do webpack.
+      - frontend_next_cache:/app/.next
     depends_on:
       backend:
         condition: service_healthy
@@ -82,6 +110,8 @@ volumes:
   backend_uploads:
     driver: local
   backend_logs:
+    driver: local
+  frontend_next_cache:
     driver: local
 
 networks:

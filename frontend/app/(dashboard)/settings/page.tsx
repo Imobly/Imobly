@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/contexts/auth';
 import { Settings, User, Lock, LogOut, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { formatDate } from '@/lib/utils/format'
 
 export default function SettingsPage() {
   const { user, logout, changePassword, updateUser } = useAuth();
@@ -373,7 +374,7 @@ export default function SettingsPage() {
                 <div>
                   <span className="text-gray-600">Conta criada em:</span>
                   <p className="font-medium text-gray-900 mt-1">
-                    {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR', {
+                    {user?.created_at ? formatDate(user.created_at, {
                       day: '2-digit',
                       month: 'long',
                       year: 'numeric'
@@ -383,7 +384,7 @@ export default function SettingsPage() {
                 <div>
                   <span className="text-gray-600">Última atualização:</span>
                   <p className="font-medium text-gray-900 mt-1">
-                    {user?.updated_at ? new Date(user.updated_at).toLocaleDateString('pt-BR', {
+                    {user?.updated_at ? formatDate(user.updated_at, {
                       day: '2-digit',
                       month: 'long',
                       year: 'numeric'

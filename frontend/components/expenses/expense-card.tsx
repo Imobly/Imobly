@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Edit, Trash2, FileText, Calendar, MapPin, User, AlertTriangle } from "lucide-react"
 import { useProperties } from "@/lib/hooks/useProperties"
+import { formatCurrency, formatDate } from '@/lib/utils/format'
 
 interface Expense {
   id: string
@@ -117,13 +118,13 @@ export function ExpenseCard({ expenses, onEdit, onDelete }: ExpenseCardProps) {
 
           <CardContent className="space-y-4">
             <div className="text-2xl font-bold text-foreground">
-              {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(expense.amount)}
+              {formatCurrency(expense.amount)}
             </div>
 
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Calendar className="h-4 w-4" />
-                {new Date(expense.date).toLocaleDateString("pt-BR")}
+                {formatDate(expense.date)}
               </div>
 
               <div className="flex items-center gap-2 text-muted-foreground">

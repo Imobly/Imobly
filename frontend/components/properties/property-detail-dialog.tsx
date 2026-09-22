@@ -24,6 +24,7 @@ import {
 import { Property } from "@/lib/types/property"
 import Image from "next/image"
 import { useTenants } from "@/lib/hooks/useTenants"
+import { formatNumber } from '@/lib/utils/format'
 
 interface PropertyDetailDialogProps {
   open: boolean
@@ -58,9 +59,10 @@ export function PropertyDetailDialog({
     ? tenants.find((t) => t.id === property.tenant_id)?.name
     : undefined
 
-  // Build full image URLs
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") || "http://localhost:8000"
+  // Build full image URLs. Ver a nota em property-card.tsx: as fotos chegam do
+  // Supabase Storage já absolutas, então o prefixo é só para path relativo
+  // legado e não deve apontar para localhost:8000.
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") ?? ""
   const images =
     property.images && property.images.length > 0
       ? property.images.map((img) => {
@@ -201,7 +203,7 @@ export function PropertyDetailDialog({
                   </p>
                   <p className="text-2xl md:text-3xl font-bold text-blue-700">
                     R${" "}
-                    {property.rent.toLocaleString("pt-BR", {
+                    {formatNumber(property.rent, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}

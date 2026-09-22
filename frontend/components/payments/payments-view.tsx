@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Search, AlertTriangle, TrendingUp, CheckCircle, Clock, XCircle, RefreshCw, DollarSign } from "lucide-react"
+import { Plus, Search, AlertTriangle, TrendingUp, CheckCircle, Clock, XCircle, RefreshCw, DollarSign, PieChart } from "lucide-react"
 import { usePayments } from "@/lib/hooks/usePayments"
 import { useProperties } from "@/lib/hooks/useProperties"
 import { useTenants } from "@/lib/hooks/useTenants"
@@ -114,16 +114,27 @@ export function PaymentsView() {
     overdue: filteredPayments.filter((p) => p.status === "atrasado").length,
   }
 
+  // Somar `totalAmount` em toda linha dava um "recebido" que incluía o que
+  // ainda não entrou: em cobrança parcial esse campo é o total DEVIDO. Cada
+  // total abaixo usa o campo que responde à sua própria pergunta.
   const totalAmount = filteredPayments.reduce((s, p) => s + (p.totalAmount || 0), 0)
-  const paidAmount = filteredPayments
-    .filter((p) => p.status === "pago")
-    .reduce((s, p) => s + (p.totalAmount || 0), 0)
-  const pendingAmount = filteredPayments
-    .filter((p) => p.status === "pendente")
-    .reduce((s, p) => s + (p.totalAmount || 0), 0)
-  const overdueAmount = filteredPayments
-    .filter((p) => p.status === "atrasado")
-    .reduce((s, p) => s + (p.totalAmount || 0), 0)
+  const paidAmount = filteredPayments.reduce((s, p) => s + (p.paidAmount || 0), 0)
+
+  // Um status por card, sem sobreposição. Antes o valor de "Em Atraso" somava
+  // `atrasado` + `parcial` enquanto a CONTAGEM logo acima contava só
+  // `atrasado`: o número e o dinheiro embaixo dele falavam de conjuntos
+  // diferentes, e `parcial` não aparecia em card nenhum.
+  const somaSaldo = (status: Payment["status"]) =>
+    filteredPayments
+      .filter((p) => p.status === status)
+      .reduce((s, p) => s + (p.balanceAmount || 0), 0)
+
+  const pendingAmount = somaSaldo("pendente")
+  const partialAmount = somaSaldo("parcial")
+  const overdueAmount = somaSaldo("atrasado")
+
+  // O que ainda se cobra, qualquer que seja o status.
+  const balanceAmount = pendingAmount + partialAmount + overdueAmount
 
   const handleCreatePayment = () => {
     setSelectedPayment(null)
@@ -257,21 +268,27 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {/* Status Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Status Cards — os quatro status são EXCLUSIVOS entre si: cada
+          cobrança está em um e só um deles, e as contagens abaixo somam o
+          total. O que responde "quanto ainda falta" não é o status, é o saldo
+          devedor que aparece embaixo de cada card. */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Pagamentos</CardTitle>
+            <CardTitle className="text-sm font-medium">Total de Cobranças</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{statusCounts.total}</div>
+            <p className="text-xs text-muted-foreground">
+              {currencyFormat(balanceAmount)} a receber
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pagos</CardTitle>
+            <CardTitle className="text-sm font-medium">Pagas</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -290,7 +307,20 @@ export function PaymentsView() {
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{statusCounts.pending}</div>
             <p className="text-xs text-muted-foreground">
-              {currencyFormat(pendingAmount)} pendentes
+              Nada recebido, ainda no prazo · {currencyFormat(pendingAmount)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Parciais</CardTitle>
+            <PieChart className="h-4 w-4 text-orange-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{statusCounts.partial}</div>
+            <p className="text-xs text-muted-foreground">
+              Recebido em parte · {currencyFormat(partialAmount)} de saldo
             </p>
           </CardContent>
         </Card>
@@ -303,7 +333,7 @@ export function PaymentsView() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{statusCounts.overdue}</div>
             <p className="text-xs text-muted-foreground">
-              {currencyFormat(overdueAmount)} em atraso
+              Nada recebido, prazo vencido · {currencyFormat(overdueAmount)}
             </p>
           </CardContent>
         </Card>

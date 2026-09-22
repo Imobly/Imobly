@@ -28,6 +28,20 @@ export interface Payment {
   fine_amount?: number // compatibilidade com API
   totalAmount: number
   total_amount?: number // compatibilidade com API
+  /**
+   * Campos da cobrança por trás deste pagamento.
+   *
+   * `totalAmount` passou a ser o TOTAL DEVIDO (com multa e juros); antes ele
+   * ora era o devido, ora o pago, conforme o caminho que criou o registro.
+   * `paidAmount` é o que entrou e `balanceAmount` é o que falta — o número
+   * que a gestão de inadimplência realmente persegue.
+   */
+  paidAmount: number
+  paid_amount?: number
+  balanceAmount: number
+  balance_amount?: number
+  daysOverdue: number
+  days_overdue?: number
   status: 'pendente' | 'pago' | 'atrasado' | 'parcial'
   paymentMethod: 'cash' | 'transfer' | 'pix' | 'check' | 'card' | null
   payment_method?: 'cash' | 'transfer' | 'pix' | 'check' | 'card' | null // compatibilidade com API
@@ -89,6 +103,12 @@ export const convertApiToPayment = (apiPayment: PaymentResponse): Payment => ({
   fine_amount: Number(apiPayment.fine_amount) || 0,
   totalAmount: Number(apiPayment.total_amount) || 0,
   total_amount: Number(apiPayment.total_amount) || 0,
+  paidAmount: Number((apiPayment as any).paid_amount) || 0,
+  paid_amount: Number((apiPayment as any).paid_amount) || 0,
+  balanceAmount: Number((apiPayment as any).balance_amount) || 0,
+  balance_amount: Number((apiPayment as any).balance_amount) || 0,
+  daysOverdue: Number((apiPayment as any).days_overdue) || 0,
+  days_overdue: Number((apiPayment as any).days_overdue) || 0,
   status: apiPayment.status,
   paymentMethod: apiPayment.payment_method || null,
   payment_method: apiPayment.payment_method,

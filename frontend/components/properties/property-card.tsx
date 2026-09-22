@@ -9,6 +9,7 @@ import Image from "next/image"
 import { Property } from "@/lib/types/property"
 import { useTenants } from "@/lib/hooks/useTenants"
 import { PropertyDetailDialog } from "./property-detail-dialog"
+import { formatCurrency } from '@/lib/utils/format'
 
 interface PropertyCardProps {
   property: Property
@@ -20,12 +21,14 @@ const statusConfig = {
   occupied: { label: "Ocupado", className: "bg-green-100 text-green-800" },
   vacant: { label: "Vago", className: "bg-gray-100 text-gray-800" },
   maintenance: { label: "Manutenção", className: "bg-orange-100 text-orange-800" },
+  inactive: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
 }
 
 const typeConfig = {
   apartment: "Apartamento",
   house: "Casa",
   commercial: "Comercial",
+  studio: "Studio",
 }
 
 export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) {
@@ -34,8 +37,14 @@ export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) 
   const { tenants } = useTenants()
   const tenantName = property.tenant_id ? tenants.find(t => t.id === property.tenant_id)?.name : undefined
   
-  // Construir URLs completas das imagens
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:8000'
+  // Construir URLs completas das imagens.
+  //
+  // As fotos vêm do Supabase Storage com URL absoluta, tratada pelo
+  // startsWith('http') abaixo; o backend não serve mais /uploads (o mount foi
+  // removido por expor documentos sem autenticação). O prefixo só cobre um
+  // path relativo legado — e fica relativo ao próprio frontend, sem apontar
+  // para localhost:8000, porta que outro projeto pode estar ocupando.
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ?? ''
   const images = property.images && property.images.length > 0 
     ? property.images.map(img => img.startsWith('http') ? img : `${baseUrl}${img}`)
     : ["/placeholder.svg"]
@@ -126,8 +135,18 @@ export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) 
           </Button>
         </div>
         <div className="absolute top-2 left-2">
-          <Badge variant="secondary" className={statusConfig[property.status as keyof typeof statusConfig].className}>
-            {statusConfig[property.status as keyof typeof statusConfig].label}
+          {/* Acesso defensivo: um status fora do mapa (ex.: vindo direto da
+              API antes de um novo valor ser cadastrado aqui) não pode
+              derrubar o card inteiro com "Cannot read properties of
+              undefined". */}
+          <Badge
+            variant="secondary"
+            className={
+              (statusConfig[property.status as keyof typeof statusConfig] ?? statusConfig.vacant)
+                .className
+            }
+          >
+            {(statusConfig[property.status as keyof typeof statusConfig] ?? statusConfig.vacant).label}
           </Badge>
         </div>
       </div>
@@ -148,7 +167,7 @@ export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) 
         <div className="space-y-3">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Tipo:</span>
-            <span>{typeConfig[property.type as keyof typeof typeConfig]}</span>
+            <span>{typeConfig[property.type as keyof typeof typeConfig] ?? property.type}</span>
           </div>
 
           <div className="flex items-center justify-between text-sm">
@@ -183,7 +202,7 @@ export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) 
           )}
 
           <div className="flex items-center justify-between pt-2 border-t">
-            <span className="text-lg font-bold">R$ {property.rent.toLocaleString("pt-BR")}</span>
+            <span className="text-lg font-bold">{formatCurrency(property.rent)}</span>
             <span className="text-xs text-muted-foreground">/mês</span>
           </div>
         </div>

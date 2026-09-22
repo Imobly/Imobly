@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Phone, Building2, Edit, Trash2, Calendar, DollarSign } from "lucide-react"
 import { TenantResponse } from "@/lib/types/api"
 import { TenantDetailDialog } from "@/components/tenants/tenant-detail-dialog"
+import { formatCurrency } from '@/lib/utils/format'
 
 interface TenantCardProps {
   tenant: TenantResponse & {
@@ -23,6 +24,16 @@ interface TenantCardProps {
 const statusConfig = {
   ativo: { label: "Ativo", className: "bg-green-100 text-green-800" },
   inativo: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
+}
+
+// Situação financeira ao lado do status do contrato: são perguntas
+// diferentes. Um inquilino "Ativo" pode dever três meses, e era exatamente
+// isso que o card não mostrava.
+const situacaoConfig = {
+  em_dia: { label: "Em dia", className: "bg-green-100 text-green-800" },
+  atraso_leve: { label: "Atraso leve", className: "bg-amber-100 text-amber-800" },
+  inadimplente: { label: "Inadimplente", className: "bg-orange-100 text-orange-900" },
+  critico: { label: "Crítico", className: "bg-red-100 text-red-800" },
 }
 
 export function TenantCard({ tenant, onEdit, onDelete }: TenantCardProps) {
@@ -94,12 +105,23 @@ export function TenantCard({ tenant, onEdit, onDelete }: TenantCardProps) {
               </Avatar>
               <div>
                 <h3 className="font-semibold text-lg leading-tight">{tenant.name}</h3>
-                <Badge 
-                  variant="secondary" 
-                  className={`mt-1 ${(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).className}`}
-                >
-                  {(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).label}
-                </Badge>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <Badge
+                    variant="secondary"
+                    className={(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).className}
+                  >
+                    {(statusConfig[tenant.status as keyof typeof statusConfig] ?? statusConfig.inativo).label}
+                  </Badge>
+                  {tenant.situacao_financeira && tenant.situacao_financeira !== "em_dia" && (
+                    <Badge
+                      variant="secondary"
+                      className={situacaoConfig[tenant.situacao_financeira].className}
+                    >
+                      {situacaoConfig[tenant.situacao_financeira].label}
+                      {tenant.dias_atraso ? ` · ${tenant.dias_atraso}d` : ""}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -151,7 +173,7 @@ export function TenantCard({ tenant, onEdit, onDelete }: TenantCardProps) {
                   <span className="text-gray-600">Aluguel</span>
                 </div>
                 <span className="text-lg font-bold text-green-700">
-                  R$ {tenant.rent.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatCurrency(tenant.rent)}
                 </span>
               </div>
             ) : (

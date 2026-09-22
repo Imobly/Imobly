@@ -1,6 +1,7 @@
 "use client"
 
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, Bar, BarChart } from "recharts"
+import { formatCurrency } from '@/lib/utils/format'
 
 const data = [
   {
@@ -51,10 +52,10 @@ export function PaymentChart() {
           fontSize={12}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `R$ ${value.toLocaleString("pt-BR")}`}
+          tickFormatter={(value) => formatCurrency(value)}
         />
         <Tooltip
-          formatter={(value: number) => [`R$ ${value.toLocaleString("pt-BR")}`, ""]}
+          formatter={(value: number) => [formatCurrency(value), ""]}
           labelStyle={{ color: "#000" }}
         />
         <Legend />

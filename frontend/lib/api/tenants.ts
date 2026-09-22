@@ -60,7 +60,7 @@ export class TenantsService {
     uploaded_files: TenantDocument[]
     total_documents: number
   }> {
-    // 1. Upload direto ao Supabase → bucket private-documents
+    // 1. Upload direto ao Supabase → bucket tenant-documents
     const results = await storageUploadDocs(files, tenantId, userId, onProgress)
 
     // 2. Construir objetos TenantDocument
@@ -97,7 +97,7 @@ export class TenantsService {
 
   // Gerar URL temporária para visualizar documento privado
   async getDocumentSignedUrl(path: string): Promise<string> {
-    return getSignedUrl(path)
+    return getSignedUrl(path, 'tenant-documents')
   }
 
   // Deletar documento do inquilino
@@ -111,7 +111,7 @@ export class TenantsService {
   }> {
     // 1. Deletar do Supabase Storage
     try {
-      await deleteFile(documentPath, 'private-documents')
+      await deleteFile(documentPath, 'tenant-documents')
     } catch {
       // Se falhar a exclusão do storage, continua removendo do DB
     }

@@ -12,6 +12,7 @@ import { usePayments } from '@/lib/hooks/usePayments'
 import { useExpenses } from '@/lib/hooks/useExpenses'
 import { useContracts } from '@/lib/hooks/useContracts'
 import { useTenants } from '@/lib/hooks/useTenants'
+import { useAging, useDelinquency } from '@/lib/hooks/useCharges'
 import { contractsService } from '@/lib/api/contracts'
 import { PieChart as PieIcon, BarChart as BarIcon, Clock, AlertTriangle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -59,6 +60,8 @@ export default function DashboardPage() {
   const { expenses } = useExpenses()
   const { contracts, refetch: refetchContracts } = useContracts()
   const { tenants, refetch: refetchTenants } = useTenants()
+  const { rows: delinquencyRows } = useDelinquency()
+  const { aging } = useAging()
 
   // ── Filter state (global) ──
   const now = new Date()
@@ -117,7 +120,11 @@ export default function DashboardPage() {
       return true
     })
 
-    const receitaTotal = filteredPayments.reduce((sum, p) => sum + (p.total_amount || p.amount || 0), 0)
+    // `paid_amount` é o que ENTROU. `total_amount` passou a ser o total
+    // devido (com multa e juros), então somá-lo aqui inflaria a receita de
+    // toda cobrança paga com atraso — e contaria integralmente a que foi paga
+    // pela metade.
+    const receitaTotal = filteredPayments.reduce((sum, p) => sum + (Number((p as any).paid_amount) || 0), 0)
     const despesasTotal = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
     const resultado = receitaTotal - despesasTotal
 
@@ -140,7 +147,7 @@ export default function DashboardPage() {
   const revenueByProperty = useMemo(() => {
     const propMap = new Map<number, number>()
     finance.filteredPayments.forEach(p => {
-      propMap.set(p.property_id, (propMap.get(p.property_id) || 0) + (p.total_amount || p.amount || 0))
+      propMap.set(p.property_id, (propMap.get(p.property_id) || 0) + (Number((p as any).paid_amount) || 0))
     })
     const props = propertiesStatus?.properties ?? []
     return Array.from(propMap.entries())
@@ -198,61 +205,30 @@ export default function DashboardPage() {
     return { activeContracts, expiringSoon }
   }, [contracts])
 
-  // ── Delinquency data (overdue payments grouped by tenant, enriched with names) ──
+  // ── Inadimplência — agregada no SERVIDOR, uma linha por inquilino ──
+  // A agregação que existia aqui somava `total_amount` de cada pagamento, e
+  // nos registros parciais essa coluna guardava o valor PAGO: o painel exibia
+  // como dívida justamente o que já tinha sido recebido. Agora o backend
+  // devolve o saldo, com multa e juros do dia.
   const delinquency = useMemo(() => {
-    const overduePayments = payments.filter(p => p.status === 'atrasado')
-    const props = propertiesStatus?.properties ?? []
-    const byTenant = new Map<number, { tenant_id: number; tenant_name: string; property_name: string; count: number; total: number }>()
-    overduePayments.forEach(p => {
-      const existing = byTenant.get(p.tenant_id)
-      const tenant = tenants.find(t => t.id === p.tenant_id)
-      const tenantName = tenant?.name ?? `Inquilino #${p.tenant_id}`
-      const prop = props.find(pr => (pr.id || pr.property_id) === p.property_id)
-      const propertyName = prop?.property_name || prop?.name || `Imóvel #${p.property_id}`
-      if (existing) {
-        existing.count += 1
-        existing.total += (Number(p.total_amount) || Number(p.amount) || 0)
-      } else {
-        byTenant.set(p.tenant_id, {
-          tenant_id: p.tenant_id,
-          tenant_name: tenantName,
-          property_name: propertyName,
-          count: 1,
-          total: (Number(p.total_amount) || Number(p.amount) || 0),
-        })
-      }
-    })
-    const list = Array.from(byTenant.values()).sort((a, b) => b.total - a.total)
-    return { overdueCount: overduePayments.length, totalOverdue: overduePayments.reduce((s, p) => s + (Number(p.total_amount) || Number(p.amount) || 0), 0), list }
-  }, [payments, tenants, propertiesStatus])
+    const vencidos = delinquencyRows.filter(r => r.days_overdue > 0)
+    return {
+      overdueCount: vencidos.reduce((s, r) => s + r.open_charges, 0),
+      totalOverdue: vencidos.reduce((s, r) => s + r.overdue_balance, 0),
+      list: vencidos,
+    }
+  }, [delinquencyRows])
 
-  // ── Partial payments (parcial) grouped by tenant ──
   const partialPayments = useMemo(() => {
-    const partialPmts = payments.filter(p => p.status === 'parcial')
-    const props = propertiesStatus?.properties ?? []
-    const byTenant = new Map<number, { tenant_id: number; tenant_name: string; property_name: string; count: number; total: number }>()
-    partialPmts.forEach(p => {
-      const existing = byTenant.get(p.tenant_id)
-      const tenant = tenants.find(t => t.id === p.tenant_id)
-      const tenantName = tenant?.name ?? `Inquilino #${p.tenant_id}`
-      const prop = props.find(pr => (pr.id || pr.property_id) === p.property_id)
-      const propertyName = prop?.property_name || prop?.name || `Imóvel #${p.property_id}`
-      if (existing) {
-        existing.count += 1
-        existing.total += (Number(p.total_amount) || Number(p.amount) || 0)
-      } else {
-        byTenant.set(p.tenant_id, {
-          tenant_id: p.tenant_id,
-          tenant_name: tenantName,
-          property_name: propertyName,
-          count: 1,
-          total: (Number(p.total_amount) || Number(p.amount) || 0),
-        })
-      }
-    })
-    const list = Array.from(byTenant.values()).sort((a, b) => b.total - a.total)
-    return { partialCount: partialPmts.length, list }
-  }, [payments, tenants, propertiesStatus])
+    // Quem já pagou parte: saldo menor que o total devido, mas ainda maior
+    // que zero.
+    const parciais = delinquencyRows.filter(r => r.days_overdue <= 0)
+    return {
+      partialCount: parciais.reduce((s, r) => s + r.open_charges, 0),
+      list: parciais,
+    }
+  }, [delinquencyRows])
+
 
   // ── Handle finalizar contrato ──
   const handleFinalizarContrato = async (contractId: number) => {
@@ -569,15 +545,57 @@ export default function DashboardPage() {
         <section>
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle className="h-5 w-5 text-red-600" />
-            <h2 className="text-xl font-semibold">Pagamentos</h2>
+            <h2 className="text-xl font-semibold">Cobranças e inadimplência</h2>
           </div>
+
+          {/* Aging — vencidos por faixa. É o relatório padrão do setor: 90 dias
+              de atraso e 5 dias de atraso são problemas diferentes, e somá-los
+              num total único esconde exatamente a diferença que importa. */}
+          {aging && aging.total_open > 0 && (
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-base">
+                  <span>Saldo em aberto por faixa de atraso</span>
+                  <span className="text-sm font-normal text-muted-foreground">
+                    total {currencyFormat(aging.total_open)} · vencido{' '}
+                    <span className="text-red-600 font-medium">
+                      {currencyFormat(aging.total_overdue)}
+                    </span>
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {aging.buckets.map(b => (
+                    <div key={b.bucket} className="rounded-lg border p-3">
+                      <div className="text-xs text-muted-foreground">{b.label}</div>
+                      <div
+                        className={`text-lg font-bold ${
+                          b.bucket === 'a_vencer'
+                            ? 'text-blue-600'
+                            : b.bucket === 'd90_mais'
+                              ? 'text-red-800'
+                              : 'text-red-600'
+                        }`}
+                      >
+                        {currencyFormat(b.amount)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {b.count} cobrança(s)
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-6 md:grid-cols-2">
             {/* Pagamentos em atraso */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>Pagamentos em atraso</span>
+                  <span>Inadimplência</span>
                   {delinquency.overdueCount > 0 && (
                     <Badge variant="destructive">{delinquency.overdueCount}</Badge>
                   )}
@@ -585,7 +603,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {delinquency.list.length === 0 ? (
-                  <p className="text-muted-foreground">Nenhum pagamento em atraso.</p>
+                  <p className="text-muted-foreground">Nenhuma cobrança vencida.</p>
                 ) : (
                   <ul className="space-y-2">
                     {delinquency.list.map(d => (
@@ -594,8 +612,10 @@ export default function DashboardPage() {
                           <span className="font-medium">{d.tenant_name}</span>
                           <span className="text-muted-foreground ml-2">• {d.property_name}</span>
                         </div>
-                        <Badge variant="outline" className="mr-2">{d.count} pgto(s)</Badge>
-                        <span className="font-semibold text-red-600">{currencyFormat(d.total)}</span>
+                        <Badge variant="outline" className="mr-2">
+                          {d.open_charges} cobrança(s) · {d.days_overdue}d
+                        </Badge>
+                        <span className="font-semibold text-red-600">{currencyFormat(d.balance)}</span>
                       </li>
                     ))}
                   </ul>
@@ -607,7 +627,7 @@ export default function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>Pagamentos parciais</span>
+                  <span>Em aberto a vencer</span>
                   {partialPayments.partialCount > 0 && (
                     <Badge variant="secondary">{partialPayments.partialCount}</Badge>
                   )}
@@ -615,7 +635,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 {partialPayments.list.length === 0 ? (
-                  <p className="text-muted-foreground">Nenhum pagamento parcial.</p>
+                  <p className="text-muted-foreground">Nada em aberto a vencer.</p>
                 ) : (
                   <ul className="space-y-2">
                     {partialPayments.list.map(d => (
@@ -624,8 +644,8 @@ export default function DashboardPage() {
                           <span className="font-medium">{d.tenant_name}</span>
                           <span className="text-muted-foreground ml-2">• {d.property_name}</span>
                         </div>
-                        <Badge variant="outline" className="mr-2">{d.count} pgto(s)</Badge>
-                        <span className="font-semibold text-amber-600">{currencyFormat(d.total)}</span>
+                        <Badge variant="outline" className="mr-2">{d.open_charges} cobrança(s)</Badge>
+                        <span className="font-semibold text-amber-600">{currencyFormat(d.balance)}</span>
                       </li>
                     ))}
                   </ul>

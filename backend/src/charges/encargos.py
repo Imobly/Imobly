@@ -1,7 +1,12 @@
 """
 Cálculo de multa, juros e situação de um pagamento.
 
-Extraído de `router.py`, onde estava duplicado entre `/calculate` e
+Vive em `charges/` porque encargo por atraso é regra da COBRANÇA. Enquanto
+morava em `payments/`, `charges` precisava importar o módulo legado e
+`payments` importava `charges` de volta — import circular que só não explodia
+porque ninguém tinha ainda fechado o ciclo.
+
+Antes disso estava duplicado dentro de `router.py`, entre `/calculate` e
 `/register` — duas cópias que já divergiam (só `/register` gravava, e o
 arredondamento diferia).
 

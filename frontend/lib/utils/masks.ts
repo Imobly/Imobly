@@ -1,5 +1,7 @@
 // Utilitários para máscaras de input
 
+import { formatNumber, getDecimalSeparator, toNumber } from './format'
+
 /**
  * Máscara para telefone brasileiro
  * Aceita: (11) 98888-8888 ou (11) 3888-8888
@@ -116,49 +118,41 @@ export function cepMask(value: string): string {
 }
 
 /**
- * Máscara para valores monetários
- * Formato: R$ 1.234,56
- * Funciona como calculadora - dígitos entram da direita para esquerda
+ * Formata um valor monetário no padrão da máquina do usuário (2 casas).
+ *
+ * Aceita número ou string — inclusive o decimal canônico que a API devolve
+ * (`"600.0"`, resultado de `Decimal` serializado pelo Pydantic). Antes essa
+ * string era lida dígito a dígito como centavos, e R$ 600,00 aparecia no
+ * formulário de edição como R$ 60,00.
+ *
+ * Para o campo funcionar como calculadora (dígitos entrando da direita para a
+ * esquerda), o `onChange` passa o texto por `currencyUnmask` PRIMEIRO; é a
+ * divisão por 100 de lá que produz os centavos, não esta função.
  */
-export function currencyMask(value: string | number): string {
-  if (!value && value !== 0) return ''
-  
-  // Se for número, converte para string de centavos
-  let numbers: string
-  if (typeof value === 'number') {
-    // Multiplica por 100 para obter centavos e remove decimais
-    numbers = Math.round(value * 100).toString()
-  } else {
-    // Remove tudo exceto números
-    numbers = value.replace(/\D/g, '')
-  }
-  
-  if (!numbers || numbers === '0') return '0,00'
-  
-  // Converte para número e divide por 100 (os últimos 2 dígitos são centavos)
-  const amount = parseInt(numbers) / 100
-  
-  // Formata como moeda brasileira
-  return amount.toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })
+export function currencyMask(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return ''
+
+  return formatNumber(value)
 }
 
 /**
- * Remove máscara de moeda e retorna número
- * Converte a string formatada de volta para número decimal
+ * Lê o campo monetário como uma sequência de centavos e devolve o número.
+ *
+ * Só os dígitos importam: digitar `6` vira 0,06 e `600` vira 6,00,
+ * independentemente de a máquina separar decimais com `,` ou com `.`.
  */
-export function currencyUnmask(value: string): number {
-  if (!value) return 0
-  
-  // Remove tudo exceto números
+export function currencyUnmask(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0
+  if (typeof value === 'number') return value
+
+  // Preserva o sinal, que `\D` descartaria junto com os separadores.
+  const negative = value.trim().startsWith('-')
   const numbers = value.replace(/\D/g, '')
-  
+
   if (!numbers) return 0
-  
-  // Divide por 100 pois os últimos 2 dígitos são centavos
-  return parseInt(numbers) / 100
+
+  const amount = parseInt(numbers, 10) / 100
+  return negative ? -amount : amount
 }
 
 /**
@@ -177,22 +171,32 @@ export function integerMask(value: string): string {
 }
 
 /**
- * Máscara para área em metros quadrados
- * Formato: 123.45 m²
+ * Máscara para área em metros quadrados.
+ *
+ * Aceita `,` e `.` como decimal — num teclado ABNT2 a tecla do bloco numérico
+ * produz `,` mesmo com o Windows em `en-US` — e exibe o separador da máquina.
+ * Mantém o texto como string enquanto se digita: converter para número a cada
+ * tecla impedia digitar `85,` antes do `5`.
  */
-export function areaMask(value: string): string {
-  if (!value) return ''
-  
-  // Remove tudo exceto números e ponto
-  const cleaned = value.replace(/[^\d.]/g, '')
-  
-  // Garante apenas um ponto decimal
-  const parts = cleaned.split('.')
-  if (parts.length > 2) {
-    return `${parts[0]}.${parts.slice(1).join('')}`
+export function areaMask(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return ''
+  // Sem agrupamento de milhar: o separador de milhar voltaria por esta mesma
+  // função na tecla seguinte e seria lido como decimal (1.500 -> 1,5).
+  if (typeof value === 'number') {
+    return formatNumber(value, { useGrouping: false, maximumFractionDigits: 2 })
   }
-  
-  return cleaned
+
+  const separator = getDecimalSeparator()
+
+  // Normaliza qualquer separador digitado para o da máquina e mantém só o
+  // primeiro: o resto é ruído de digitação.
+  const cleaned = value.replace(/[^\d.,]/g, '').replace(/[.,]/g, separator)
+  const [integerPart, ...rest] = cleaned.split(separator)
+
+  if (rest.length === 0) return integerPart
+
+  const decimalPart = rest.join('').slice(0, 2)
+  return `${integerPart}${separator}${decimalPart}`
 }
 
 /**
@@ -289,45 +293,25 @@ export function isValidPhone(phone: string): boolean {
 }
 
 /**
- * Máscara para percentuais
- * Formato: 12,34
- * Permite valores decimais com até 2 casas
+ * Máscara para percentuais (até 2 casas), no separador da máquina.
  */
-export function percentageMask(value: string | number): string {
-  if (!value && value !== 0) return ''
-  
-  // Se for número, converte para string com 2 decimais
-  let stringValue: string
-  if (typeof value === 'number') {
-    stringValue = value.toFixed(2).replace('.', ',')
-  } else {
-    // Remove tudo exceto números e vírgula
-    stringValue = value.replace(/[^\d,]/g, '')
-    
-    // Garante apenas uma vírgula
-    const parts = stringValue.split(',')
-    if (parts.length > 2) {
-      stringValue = `${parts[0]},${parts.slice(1).join('')}`
-    }
-    
-    // Limita casas decimais a 2
-    if (parts.length === 2 && parts[1].length > 2) {
-      stringValue = `${parts[0]},${parts[1].substring(0, 2)}`
-    }
-  }
-  
-  return stringValue
+export function percentageMask(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'number') return formatNumber(value, { useGrouping: false, maximumFractionDigits: 2 })
+
+  const separator = getDecimalSeparator()
+  const cleaned = value.replace(/[^\d.,]/g, '').replace(/[.,]/g, separator)
+  const [integerPart, ...rest] = cleaned.split(separator)
+
+  if (rest.length === 0) return integerPart
+
+  const decimalPart = rest.join('').slice(0, 2)
+  return `${integerPart}${separator}${decimalPart}`
 }
 
 /**
- * Remove máscara de percentual e retorna número
+ * Remove máscara de percentual e retorna número.
  */
-export function percentageUnmask(value: string): number {
-  if (!value) return 0
-  
-  // Substitui vírgula por ponto e converte para número
-  const cleaned = value.replace(',', '.')
-  const number = parseFloat(cleaned)
-  
-  return isNaN(number) ? 0 : number
+export function percentageUnmask(value: string | number | null | undefined): number {
+  return toNumber(value)
 }

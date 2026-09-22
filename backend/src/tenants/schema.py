@@ -71,4 +71,17 @@ class TenantRead(TenantBase):
 
 
 class TenantResponse(TenantRead):
-    pass
+    """
+    Inquilino + situação financeira.
+
+    `status` (ativo/inativo) responde "tem contrato vigente?". Não responde
+    "está pagando?", que é a pergunta que a gestão de carteira faz o tempo
+    todo — e que antes exigia abrir a página de pagamentos e somar de cabeça.
+
+    Os campos são derivados das cobranças em aberto, nunca gravados.
+    """
+
+    situacao_financeira: str = "em_dia"  # em_dia | atraso_leve | inadimplente | critico
+    saldo_devedor: float = 0.0           # já com multa e juros do dia
+    dias_atraso: int = 0                 # do vencimento em aberto mais antigo
+    cobrancas_em_aberto: int = 0

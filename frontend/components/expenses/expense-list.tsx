@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Edit, Trash2, FileText, AlertTriangle } from "lucide-react"
 import { useProperties } from "@/lib/hooks/useProperties"
+import { formatCurrency, formatDate } from '@/lib/utils/format'
 
 interface Expense {
   id: string
@@ -30,7 +31,6 @@ interface ExpenseListProps {
 
 export function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListProps) {
   const { properties } = useProperties()
-  const formatCurrency = (amount: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount)
   const getPropertyInfo = (expense: Expense) => {
     if (expense.property) return expense.property
     const found = properties.find(p => p.id === expense.property_id)
@@ -142,7 +142,7 @@ export function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListProps) {
                   <td className="p-4 font-semibold">
                     {formatCurrency(expense.amount)}
                   </td>
-                  <td className="p-4">{new Date(expense.date).toLocaleDateString("pt-BR")}</td>
+                  <td className="p-4">{formatDate(expense.date)}</td>
                   <td className="p-4 text-sm">{getPropertyInfo(expense)}</td>
                   <td className="p-4">
                     <Badge className={getStatusColor(expense.status)}>{getStatusText(expense.status)}</Badge>

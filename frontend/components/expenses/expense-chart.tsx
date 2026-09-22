@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import { formatCurrency, formatDate } from '@/lib/utils/format'
 
 interface Expense {
   id: string
@@ -24,17 +25,17 @@ interface ExpenseChartProps {
 
 export function ExpenseChart({ expenses }: ExpenseChartProps) {
   // Dados para gráfico de indicadores
-  const currentMonth = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
-  const lastMonth = new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+  const currentMonth = formatDate(new Date(), { month: "long", year: "numeric" })
+  const lastMonth = formatDate(new Date(new Date().setMonth(new Date().getMonth() - 1)), { month: "long", year: "numeric" })
   
   // Calcula os indicadores atuais
   const currentMonthExpenses = expenses.filter(expense => {
-    const expenseMonth = new Date(expense.date).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    const expenseMonth = formatDate(expense.date, { month: "long", year: "numeric" })
     return expenseMonth === currentMonth
   })
   
   const lastMonthExpenses = expenses.filter(expense => {
-    const expenseMonth = new Date(expense.date).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    const expenseMonth = formatDate(expense.date, { month: "long", year: "numeric" })
     return expenseMonth === lastMonth
   })
 
@@ -97,8 +98,8 @@ export function ExpenseChart({ expenses }: ExpenseChartProps) {
                 <div key={index} className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-2xl font-bold text-blue-600 mb-1">
                     {indicator.value < 0 ? 
-                      `-R$ ${Math.abs(indicator.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` :
-                      `R$ ${indicator.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                      `-${formatCurrency(Math.abs(indicator.value))}` :
+                      formatCurrency(indicator.value)
                     }
                   </div>
                   <div className="text-sm font-medium text-blue-700 mb-1">{indicator.title}</div>
@@ -140,7 +141,7 @@ export function ExpenseChart({ expenses }: ExpenseChartProps) {
                 </Pie>
                 <Tooltip
                   formatter={(value: number) => [
-                    `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+                    formatCurrency(value),
                     "Valor",
                   ]}
                 />

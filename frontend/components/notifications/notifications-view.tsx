@@ -4,29 +4,46 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Bell, Search, CheckCircle, AlertTriangle, Info, Clock, Trash2 } from "lucide-react"
+import { Bell, Search, CheckCircle, AlertTriangle, Info, Clock, Trash2, RefreshCw } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 import { useNotifications } from "@/lib/hooks/useNotifications"
+import { formatDateTime } from '@/lib/utils/format'
 
 export function NotificationsView() {
   const [searchTerm, setSearchTerm] = useState("")
-  
+
   const { notifications, loading, error, refetch, markAsRead, markAllAsRead, deleteNotification } = useNotifications()
 
-  // Mostrar loading
+  // Mostrar loading — mesmo padrão de despesas/inquilinos/imóveis/pagamentos.
+  // Esta tela usava um texto solto ("Carregando notificações..."), a única
+  // divergente: numa navegação lenta (cold start do Next em dev, por exemplo)
+  // era a única página que parecia travada em vez de "carregando".
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-lg">Carregando notificações...</div>
+      <div className="flex flex-col items-center justify-center h-96 space-y-4">
+        <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+        <div>
+          <h2 className="text-xl font-semibold text-center">Carregando Notificações</h2>
+          <p className="text-gray-500 text-center mt-2">Aguarde um momento...</p>
+        </div>
       </div>
     )
   }
 
-  // Mostrar erro
+  // Mostrar erro — mesmo componente `EmptyState` com ação de retentar; era a
+  // única tela sem botão para tentar de novo depois de uma falha transitória.
   if (error) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-red-500">Erro: {error}</div>
-      </div>
+      <EmptyState
+        icon={AlertTriangle}
+        title="Erro ao carregar notificações"
+        description={`Não foi possível carregar as notificações. ${error}`}
+        action={{
+          label: "Tentar novamente",
+          onClick: refetch
+        }}
+        variant="error"
+      />
     )
   }
 
@@ -199,7 +216,7 @@ export function NotificationsView() {
                         </p>
                         <div className="flex items-center gap-4 text-xs text-gray-500">
                           <span>
-                            {new Date(notification.date).toLocaleString('pt-BR')}
+                            {formatDateTime(notification.date)}
                           </span>
                           <span className="capitalize">
                             Prioridade: {notification.priority === 'urgent' ? 'Urgente' :

@@ -3,6 +3,7 @@
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
 import { useRevenueVsExpenses } from "@/lib/hooks/useDashboard"
 import { RefreshCw } from "lucide-react"
+import { formatCurrency, formatDate } from '@/lib/utils/format'
 
 interface OverviewChartProps {
   period?: string
@@ -44,7 +45,7 @@ export function OverviewChart({ period = "6months" }: OverviewChartProps) {
 
   // Formatar dados para o gráfico
   const chartData = data?.data?.map((item) => ({
-    name: new Date(item.month).toLocaleDateString('pt-BR', { month: 'short' }),
+    name: formatDate(item.month, { month: 'short' }),
     receitas: item.revenue || 0,
     despesas: item.expenses || 0,
     lucro: item.profit || 0,
@@ -59,10 +60,10 @@ export function OverviewChart({ period = "6months" }: OverviewChartProps) {
           fontSize={12}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `R$ ${value.toLocaleString("pt-BR")}`}
+          tickFormatter={(value) => formatCurrency(value)}
         />
         <Tooltip
-          formatter={(value: number) => [`R$ ${value.toLocaleString("pt-BR")}`, ""]}
+          formatter={(value: number) => [formatCurrency(value), ""]}
           labelStyle={{ color: "#000" }}
         />
         <Legend />

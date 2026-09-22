@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.contracts.models import Contract
-from src.payments.models import Payment
+from src.charges.models import Charge, PaymentEntry
 from src.properties.models import Property
 from src.tenants.models import Tenant
 
@@ -154,14 +154,15 @@ class TestNotificacoesGeradas:
     """M-03 — o endpoint documentava geração de notificações que não existia."""
 
     def test_pagamento_atrasado_gera_notificacao(self, client_as, cenario, db_session):
-        pagamento = Payment(
+        vencimento = date.today() - timedelta(days=15)
+        cobranca = Charge(
             user_id=cenario["user"].id, property_id=cenario["prop"].id,
             tenant_id=cenario["tenant"].id, contract_id=cenario["contrato"].id,
-            due_date=date.today() - timedelta(days=15),
-            amount=2000, fine_amount=0, interest_amount=0, total_amount=2000,
-            status="atrasado",
+            competencia=vencimento.replace(day=1), due_date=vencimento,
+            rent_amount=2000, charges_amount=0, discount_amount=0,
+            fine_rate=2, interest_rate=1, status="vencida",
         )
-        db_session.add(pagamento)
+        db_session.add(cobranca)
         db_session.flush()
 
         client: TestClient = client_as(cenario["user"].id)
@@ -200,16 +201,45 @@ class TestFiltrosCombinaveis:
 
     @pytest.fixture
     def pagamentos(self, db_session, cenario):
+        """
+        Três cobranças em competências distintas.
+
+        Uma cobrança por (contrato, competência) é regra do banco agora — era
+        exatamente a ausência dessa regra que permitia duplicar a dívida do
+        inquilino no mês.
+        """
         base = dict(
             user_id=cenario["user"].id, property_id=cenario["prop"].id,
             tenant_id=cenario["tenant"].id, contract_id=cenario["contrato"].id,
-            amount=1000, fine_amount=0, interest_amount=0, total_amount=1000,
+            rent_amount=1000, charges_amount=0, discount_amount=0,
+            fine_rate=0, interest_rate=0,
+        )
+        hoje = date.today()
+        quitada = Charge(
+            **base,
+            competencia=(hoje.replace(day=1) - timedelta(days=40)).replace(day=1),
+            due_date=hoje - timedelta(days=70),
+            status="quitada",
         )
         db_session.add_all([
-            Payment(**base, due_date=date.today(), status="pendente"),
-            Payment(**base, due_date=date.today(), status="atrasado"),
-            Payment(**base, due_date=date.today(), status="pago"),
+            Charge(**base, competencia=hoje.replace(day=1), due_date=hoje, status="aberta"),
+            Charge(
+                **base,
+                competencia=(hoje.replace(day=1) - timedelta(days=1)).replace(day=1),
+                due_date=hoje - timedelta(days=40),
+                status="vencida",
+            ),
+            quitada,
         ])
+        db_session.flush()
+        # Quitada sem recebimento seria dado incoerente: o status é derivado do
+        # saldo, e sem dinheiro registrado o saldo não fecha.
+        db_session.add(
+            PaymentEntry(
+                user_id=cenario["user"].id, charge_id=quitada.id,
+                date=quitada.due_date, amount=1000,
+            )
+        )
         db_session.flush()
 
     def test_property_id_e_status_combinam(self, client_as, cenario, pagamentos):

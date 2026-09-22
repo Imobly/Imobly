@@ -11,6 +11,7 @@ from src.security import get_current_user_local_id, get_storage_service
 from src.core.integrity import traduzir_erros_de_integridade
 from src.core.ownership import assert_owned_optional
 from src.core.supabase_storage_service import SupabaseStorageService
+from .ocupacao import aplicar_transicao
 from .repository import PropertyRepository
 from .schema import PropertyCreate, PropertyResponse, PropertyUpdate, PropertyCreateInternal
 
@@ -109,10 +110,46 @@ def update_property(
     db: Session = Depends(get_db),
     repository: PropertyRepository = Depends(get_property_repository),
 ):
-    """Atualizar propriedade"""
+    """
+    Atualizar propriedade.
+
+    Mudar `status` não é só trocar um rótulo: ocupar exige um inquilino e
+    desocupar encerra o contrato dele. Essa reconciliação mora no servidor
+    porque o vínculo vive em três tabelas — ver `ocupacao.py`.
+    """
     from src.tenants.models import Tenant
 
     assert_owned_optional(db, Tenant, property_data.tenant_id, user_id)
+
+    property_obj = repository.get_by_id_and_user(property_id, user_id)
+    if not property_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Propriedade não encontrada"
+        )
+
+    campos_enviados = property_data.model_dump(exclude_unset=True)
+
+    try:
+        contratos_encerrados = aplicar_transicao(
+            db,
+            property_obj,
+            user_id,
+            novo_status=campos_enviados.get("status"),
+            novo_tenant_id=campos_enviados.get("tenant_id"),
+            tenant_id_informado="tenant_id" in campos_enviados,
+        )
+    except ValueError as erro:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(erro),
+        )
+
+    if contratos_encerrados is not None:
+        # Desocupou: o desvínculo entra no próprio payload. Sem isto, um
+        # cliente que mandasse `status: vacant` E `tenant_id` do antigo morador
+        # no mesmo PUT teria o inquilino devolvido ao imóvel logo abaixo.
+        property_data.tenant_id = None
 
     updated_property = repository.update(property_id, user_id, property_data)
     if not updated_property:

@@ -89,4 +89,16 @@ class PaymentRead(PaymentBase):
 
 
 class PaymentResponse(PaymentRead):
-    pass
+    """
+    Resposta do adaptador de compatibilidade sobre `charges`.
+
+    Os três campos novos são aditivos — cliente antigo que os ignora continua
+    funcionando — e existem porque o formato antigo não conseguia responder à
+    pergunta que mais importa na gestão de inadimplência: quanto ainda falta.
+    `total_amount` é o total devido; `paid_amount` é o que entrou;
+    `balance_amount` é a diferença, já com multa e juros do dia.
+    """
+
+    paid_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    balance_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    days_overdue: int = 0

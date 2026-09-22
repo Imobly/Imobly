@@ -23,6 +23,7 @@ import { paymentsService } from "@/lib/api/payments"
 import { apiClient } from "@/lib/api/client"
 import { ContractResponse } from "@/lib/types/api"
 import { toast } from "sonner"
+import { formatCurrency } from '@/lib/utils/format'
 
 interface PaymentFormData {
   contract_id: number
@@ -358,7 +359,7 @@ export function PaymentDialog({ open, onOpenChange, payment, onSave }: PaymentDi
               <SelectContent>
                 {contracts.filter(c => c.status === 'ativo').map((contract) => (
                   <SelectItem key={contract.id} value={contract.id.toString()}>
-                    {contract.title} - R$ {parseFloat(contract.rent.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {contract.title} - {formatCurrency(contract.rent)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -392,7 +393,7 @@ export function PaymentDialog({ open, onOpenChange, payment, onSave }: PaymentDi
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Valor do Aluguel:</span>
-                  <span className="font-medium">R$ {parseFloat(selectedContract.rent.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-medium">{formatCurrency(selectedContract.rent)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Vigência:</span>
@@ -474,23 +475,23 @@ export function PaymentDialog({ open, onOpenChange, payment, onSave }: PaymentDi
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-gray-700">Valor Base:</span>
-                    <span className="font-medium">R$ {parseFloat(calculation.base_amount.toString()).toFixed(2).replace('.', ',')}</span>
+                    <span className="font-medium">{formatCurrency(calculation.base_amount)}</span>
                   </div>
                   {parseFloat(calculation.fine_amount.toString()) > 0 && (
                     <div className="flex justify-between text-orange-700">
                       <span>Multa ({selectedContract ? parseFloat(selectedContract.fine_rate.toString()).toFixed(2) : '0.00'}%):</span>
-                      <span className="font-medium">R$ {parseFloat(calculation.fine_amount.toString()).toFixed(2).replace('.', ',')}</span>
+                      <span className="font-medium">{formatCurrency(calculation.fine_amount)}</span>
                     </div>
                   )}
                   {parseFloat(calculation.interest_amount.toString()) > 0 && (
                     <div className="flex justify-between text-orange-700">
                       <span>Juros ({calculation.days_overdue} dias):</span>
-                      <span className="font-medium">R$ {parseFloat(calculation.interest_amount.toString()).toFixed(2).replace('.', ',')}</span>
+                      <span className="font-medium">{formatCurrency(calculation.interest_amount)}</span>
                     </div>
                   )}
                   <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold">
                     <span>Total a Pagar:</span>
-                    <span className="text-green-700">R$ {parseFloat(calculation.total_expected.toString()).toFixed(2).replace('.', ',')}</span>
+                    <span className="text-green-700">{formatCurrency(calculation.total_expected)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -524,7 +525,7 @@ export function PaymentDialog({ open, onOpenChange, payment, onSave }: PaymentDi
               {calculation && currencyUnmask(formData.paid_amount) !== calculation.total_expected && (
                 <p className="text-xs text-orange-600 flex items-center">
                   <Info className="h-3 w-3 mr-1" />
-                  Total calculado: R$ {calculation.total_expected.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Total calculado: {formatCurrency(calculation.total_expected)}
                   <Button type="button" variant="link" className="p-0 ml-2 h-auto text-xs" onClick={() => handleInputChange('paid_amount', currencyMask(calculation.total_expected))}>Usar total</Button>
                 </p>
               )}

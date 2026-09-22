@@ -16,6 +16,9 @@ from src.core.integrity import traduzir_erros_de_integridade
 from src.core.ownership import assert_owned_optional
 from src.core.perf import marcar
 from src.core.supabase_storage_service import SupabaseStorageService
+from src.charges.repository import ChargeRepository
+from src.charges.schema import ChargePosition, TenantLedger, TenantLedgerEntry
+from src.charges.calculo import faixa_aging
 from .repository import TenantRepository
 from .schema import TenantCreate, TenantResponse, TenantUpdate, TenantCreateInternal
 
@@ -27,6 +30,34 @@ router = APIRouter()
 def get_tenant_repository(db: Session = Depends(get_db)) -> TenantRepository:
     """Dependency para obter repository de inquilinos"""
     return TenantRepository(db)
+
+
+def get_charge_repository(db: Session = Depends(get_db)) -> ChargeRepository:
+    return ChargeRepository(db)
+
+
+def _anexar_situacao_financeira(tenants: list, user_id: int, db: Session) -> list:
+    """
+    Preenche a situação financeira da lista inteira com UMA varredura.
+
+    O caminho oposto — consultar as cobranças de cada inquilino na hora de
+    montar o card — seria N+1 na tela mais acessada do sistema. Quem não tem
+    dívida sequer aparece no resumo e fica no padrão `em_dia`.
+    """
+    if not tenants:
+        return tenants
+
+    resumo = {
+        linha["tenant_id"]: linha
+        for linha in ChargeRepository(db).resumo_inadimplencia(user_id, limite=1000)
+    }
+    for tenant in tenants:
+        linha = resumo.get(tenant.id)
+        tenant.situacao_financeira = linha["situacao"] if linha else "em_dia"
+        tenant.saldo_devedor = float(linha["balance"]) if linha else 0.0
+        tenant.dias_atraso = linha["days_overdue"] if linha else 0
+        tenant.cobrancas_em_aberto = linha["open_charges"] if linha else 0
+    return tenants
 
 
 @router.get("/", response_model=List[TenantResponse])
@@ -49,7 +80,8 @@ def get_tenants(
     else:
         tenants = repository.get_by_user(user_id, skip, limit)
 
-    return repository.anexar_status(tenants, user_id)
+    tenants = repository.anexar_status(tenants, user_id)
+    return _anexar_situacao_financeira(tenants, user_id, repository.db)
 
 
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
@@ -105,6 +137,61 @@ def create_tenant(
     return new_tenant
 
 
+@router.get("/{tenant_id}/ledger", response_model=TenantLedger)
+def get_tenant_ledger(
+    tenant_id: int,
+    user_id: int = Depends(get_current_user_local_id),
+    repository: TenantRepository = Depends(get_tenant_repository),
+    charges: ChargeRepository = Depends(get_charge_repository),
+):
+    """
+    Extrato e posição financeira do inquilino.
+
+    Responde de uma vez as perguntas que a gestão faz antes de cobrar ou de
+    renovar: quanto ele deve hoje (com multa e juros), há quantos dias, quantas
+    cobranças estão em aberto e — o que mais pesa na renovação — qual o
+    histórico de pontualidade dele.
+    """
+    tenant = repository.get_by_id_and_user(tenant_id, user_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Inquilino não encontrado"
+        )
+
+    dados = charges.ledger_do_inquilino(user_id, tenant_id)
+    itens = dados.pop("itens")
+    _, properties = charges.nomes_relacionados([c for c, _ in itens], user_id)
+
+    return TenantLedger(
+        tenant_id=tenant_id,
+        tenant_name=tenant.name,
+        **dados,
+        entries=[
+            TenantLedgerEntry(
+                charge_id=charge.id,
+                competencia=charge.competencia,
+                due_date=charge.due_date,
+                property_id=charge.property_id,
+                property_name=properties.get(charge.property_id),
+                status=posicao.status,
+                position=ChargePosition(
+                    base_amount=posicao.base,
+                    fine_amount=posicao.multa,
+                    interest_amount=posicao.juros,
+                    total_due=posicao.total_devido,
+                    paid_amount=posicao.pago,
+                    balance=posicao.saldo,
+                    days_overdue=posicao.dias_atraso,
+                    aging_bucket=faixa_aging(posicao.dias_atraso),
+                    reference_date=posicao.referencia,
+                    settled_at=posicao.data_quitacao,
+                ),
+            )
+            for charge, posicao in itens
+        ],
+    )
+
+
 @router.get("/{tenant_id}", response_model=TenantResponse)
 def get_tenant(
     tenant_id: int,
@@ -119,7 +206,8 @@ def get_tenant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Inquilino não encontrado"
         )
-    return repository.anexar_status([tenant], user_id)[0]
+    tenant = repository.anexar_status([tenant], user_id)[0]
+    return _anexar_situacao_financeira([tenant], user_id, repository.db)[0]
 
 
 @router.put("/{tenant_id}", response_model=TenantResponse)

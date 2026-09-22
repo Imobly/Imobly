@@ -57,7 +57,7 @@ export class PropertiesService {
     images: string[]
     property: PropertyResponse
   }> {
-    // 1. Upload direto ao Supabase → bucket public-assets
+    // 1. Upload direto ao Supabase → bucket property-images
     const results = await storageUploadImages(files, propertyId, userId, onProgress)
     const newUrls = results.map(r => r.publicUrl!)
 
@@ -82,9 +82,9 @@ export class PropertiesService {
     if (imageUrl) {
       try {
         const url = new URL(imageUrl)
-        const pathMatch = url.pathname.match(/\/object\/public\/public-assets\/(.+)/)
+        const pathMatch = url.pathname.match(/\/object\/public\/property-images\/(.+)/)
         if (pathMatch) {
-          await deleteFile(pathMatch[1], 'public-assets')
+          await deleteFile(pathMatch[1], 'property-images')
         }
       } catch {
         // Se falhar a exclusão do storage, continua removendo do DB

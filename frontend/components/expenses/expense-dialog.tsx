@@ -171,7 +171,7 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
         expense.id,
         fileArray,
         'comprovante',
-        user!.id,
+        user!.supabase_uid ?? '',
         formData.documents || [],
         (progress) => setUploadProgress(progress)
       )
@@ -252,7 +252,7 @@ export function ExpenseDialog({ open, onOpenChange, expense, onSave }: ExpenseDi
       const result = await expensesService.uploadReceipt(
         expense.id,
         file,
-        user!.id,
+        user!.supabase_uid ?? '',
         (progress) => setUploadProgress(progress)
       )
 

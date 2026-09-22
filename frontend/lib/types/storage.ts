@@ -2,24 +2,30 @@
 // Storage Types — Supabase Direct Upload
 // ============================================
 
-/** Buckets configurados no Supabase Storage */
-export type StorageBucket = 'public-assets' | 'private-documents'
+/** Buckets configurados no Supabase Storage.
+ *
+ * Os nomes têm de bater com os buckets que existem no projeto e com as
+ * variáveis SUPABASE_*_BUCKET de backend/.env. Antes daqui constavam
+ * 'public-assets' e 'private-documents', que não existem no projeto — todo
+ * upload falhava com "Bucket not found".
+ */
+export type StorageBucket = 'property-images' | 'tenant-documents' | 'expense-documents'
 
 /** Categorias de upload por entidade */
 export type UploadCategory = 'imoveis' | 'inquilinos' | 'despesas'
 
 /** Mapeamento categoria → bucket */
 export const CATEGORY_BUCKET_MAP: Record<UploadCategory, StorageBucket> = {
-  imoveis: 'public-assets',
-  inquilinos: 'private-documents',
-  despesas: 'private-documents',
+  imoveis: 'property-images',
+  inquilinos: 'tenant-documents',
+  despesas: 'expense-documents',
 }
 
 /** Resultado individual de um upload */
 export interface UploadResult {
   /** Caminho completo no bucket (ex: "42/imoveis/5/20260226_143000_foto.jpg") */
   path: string
-  /** URL pública — preenchida apenas para bucket public-assets */
+  /** URL pública — preenchida apenas para o bucket público (property-images) */
   publicUrl?: string
 }
 

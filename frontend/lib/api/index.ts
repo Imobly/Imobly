@@ -5,6 +5,7 @@ export { apiClient, handleApiError, buildQueryString } from './client'
 export { propertiesService } from './properties'
 export { tenantsService } from './tenants'
 export { paymentsService } from './payments'
+export { chargesService } from './charges'
 export { expensesService } from './expenses'
 export { notificationsService } from './notifications'
 export { contractsService } from './contracts'
@@ -15,6 +16,7 @@ export { dashboardService, generalService } from './dashboard'
 import { propertiesService } from './properties'
 import { tenantsService } from './tenants'
 import { paymentsService } from './payments'
+import { chargesService } from './charges'
 import { expensesService } from './expenses'
 import { notificationsService } from './notifications'
 import { contractsService } from './contracts'
@@ -23,12 +25,14 @@ import { dashboardService, generalService } from './dashboard'
 
 // Tipos da API
 export * from '@/lib/types/api'
+export * from '@/lib/types/charge'
 
 // Classe principal para acesso a todos os serviços
 export class ApiService {
   static properties = propertiesService
   static tenants = tenantsService
   static payments = paymentsService
+  static charges = chargesService
   static expenses = expensesService
   static notifications = notificationsService
   static contracts = contractsService

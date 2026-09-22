@@ -27,6 +27,8 @@ import {
 } from "lucide-react"
 import { TenantResponse } from "@/lib/types/api"
 import { Separator } from "@/components/ui/separator"
+import { TenantLedgerPanel } from "@/components/tenants/tenant-ledger"
+import { formatCurrency } from '@/lib/utils/format'
 
 interface TenantDetailDialogProps {
   tenant: TenantResponse & {
@@ -269,7 +271,7 @@ export function TenantDetailDialog({ tenant, open, onOpenChange, onEdit, onDelet
                     <div>
                       <p className="text-sm text-gray-500">Valor do Aluguel</p>
                       <p className="font-bold text-green-700 text-lg">
-                        R$ {tenant.rent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatCurrency(tenant.rent)}
                       </p>
                     </div>
                   </div>
@@ -320,6 +322,17 @@ export function TenantDetailDialog({ tenant, open, onOpenChange, onEdit, onDelet
               </div>
             </>
           )}
+
+          {/* Extrato financeiro — a pergunta "está pagando?" ao lado dos dados
+              cadastrais, em vez de numa tela separada. */}
+          <Separator />
+          <div>
+            <h3 className="font-semibold text-lg mb-3 flex items-center">
+              <DollarSign className="h-5 w-5 mr-2 text-blue-600" />
+              Situação financeira
+            </h3>
+            <TenantLedgerPanel tenantId={tenant.id} />
+          </div>
         </div>
       </DialogContent>
     </Dialog>

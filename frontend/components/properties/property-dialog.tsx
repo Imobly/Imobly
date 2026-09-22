@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useMemo, useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -18,11 +18,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, X, Plus, Edit, Building, Loader2 } from "lucide-react"
+import { Upload, X, Plus, Edit, Building, Loader2, Search, UserCheck } from "lucide-react"
 import { Property, PropertyDraft } from "@/lib/types/property"
 import { useTenants } from "@/lib/hooks/useTenants"
 import { useAuth } from "@/lib/contexts/auth"
 import { integerMask, currencyMask, currencyUnmask, areaMask, cepMask } from "@/lib/utils/masks"
+import { toNumber } from "@/lib/utils/format"
 import { propertiesService } from "@/lib/api/properties"
 import { toast } from "sonner"
 
@@ -58,6 +59,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
   const [uploadingImages, setUploadingImages] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [dragActive, setDragActive] = useState(false)
+  const [tenantSearch, setTenantSearch] = useState("")
   const { tenants } = useTenants()
   const { user } = useAuth()
 
@@ -67,7 +69,50 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
     } else {
       setFormData(initialProperty)
     }
+    setTenantSearch("")
   }, [property])
+
+  const selectedTenant = useMemo(
+    () => tenants.find((t) => t.id === formData.tenant_id) ?? null,
+    [tenants, formData.tenant_id],
+  )
+
+  // Busca por nome, e-mail ou CPF/CNPJ. O documento é comparado só por
+  // dígitos: quem procura "12345678900" tem que achar "123.456.789-00".
+  const tenantResults = useMemo(() => {
+    const termo = tenantSearch.trim().toLowerCase()
+    if (!termo) return tenants.slice(0, 8)
+
+    const digitos = termo.replace(/\D/g, "")
+    return tenants
+      .filter((t) => {
+        if (t.name?.toLowerCase().includes(termo)) return true
+        if (t.email?.toLowerCase().includes(termo)) return true
+        if (digitos && t.cpf_cnpj?.replace(/\D/g, "").includes(digitos)) return true
+        return false
+      })
+      .slice(0, 8)
+  }, [tenants, tenantSearch])
+
+  /**
+   * Troca de status do imóvel.
+   *
+   * Ocupar e desocupar não são só um rótulo: ocupado precisa de um inquilino
+   * vinculado, e voltar a vago desfaz o vínculo — o backend ainda encerra o
+   * contrato, mas o formulário tem que refletir a saída antes de salvar, senão
+   * o campo continuaria exibindo um morador que já deixou o imóvel.
+   */
+  const handleStatusChange = (value: Property["status"]) => {
+    setFormData((prev) => {
+      const desocupou = value === "vacant" && prev.status === "occupied"
+      return {
+        ...prev,
+        status: value,
+        tenant_id: desocupou ? null : prev.tenant_id,
+      }
+    })
+    if (value !== "occupied") setTenantSearch("")
+  }
 
   const validateForm = (): boolean => {
     // Validar campos obrigatórios conforme backend PropertyBase
@@ -101,30 +146,37 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
     }
     
     // Validar valores numéricos
-    const area = typeof formData.area === 'string' ? parseFloat(formData.area) : formData.area
+    const area = toNumber(formData.area)
     if (!area || area <= 0) {
       toast.error('Área deve ser maior que zero')
       return false
     }
     
-    const bedrooms = typeof formData.bedrooms === 'string' ? parseInt(formData.bedrooms) : formData.bedrooms
+    const bedrooms = toNumber(formData.bedrooms)
     if (bedrooms === undefined || bedrooms === null || bedrooms < 0) {
       toast.error('Número de quartos deve ser zero ou maior')
       return false
     }
     
-    const bathrooms = typeof formData.bathrooms === 'string' ? parseInt(formData.bathrooms) : formData.bathrooms
+    const bathrooms = toNumber(formData.bathrooms)
     if (bathrooms === undefined || bathrooms === null || bathrooms < 0) {
       toast.error('Número de banheiros deve ser zero ou maior')
       return false
     }
     
-    const rent = typeof formData.rent === 'string' ? parseFloat(formData.rent) : formData.rent
+    const rent = toNumber(formData.rent)
     if (!rent || rent <= 0) {
       toast.error('Valor do aluguel deve ser maior que zero')
       return false
     }
-    
+
+    // Mesma regra do backend, antecipada aqui para o usuário não perder o
+    // formulário inteiro num 400.
+    if (formData.status === 'occupied' && !formData.tenant_id) {
+      toast.error('Selecione o inquilino que ocupa este imóvel')
+      return false
+    }
+
     return true
   }
 
@@ -157,7 +209,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
           const result = await propertiesService.uploadImages(
             savedProperty.id,
             pendingFiles,
-            user!.id,
+            user!.supabase_uid ?? '',
             savedProperty.images || [],
             (progress) => setUploadProgress(progress)
           )
@@ -243,7 +295,7 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
       const result = await propertiesService.uploadImages(
         property.id,
         fileArray,
-        user!.id,
+        user!.supabase_uid ?? '',
         formData.images || [],
         (progress) => setUploadProgress(progress)
       )
@@ -414,7 +466,10 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
 
                 <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
-                  <Select value={formData.status} onValueChange={(value) => handleInputChange("status", value)}>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) => handleStatusChange(value as Property["status"])}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -426,6 +481,85 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                   </Select>
                 </div>
               </div>
+
+              {/* Vínculo com o inquilino — só faz sentido no imóvel ocupado. */}
+              {formData.status === "occupied" && (
+                <div className="space-y-2 rounded-lg border p-4">
+                  <Label>Inquilino *</Label>
+
+                  {selectedTenant ? (
+                    <div className="flex items-center justify-between rounded-md bg-green-50 px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <UserCheck className="h-4 w-4 shrink-0 text-green-700" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{selectedTenant.name}</p>
+                          <p className="truncate text-xs text-gray-600">{selectedTenant.email}</p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleInputChange("tenant_id", null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <Input
+                          value={tenantSearch}
+                          onChange={(e) => setTenantSearch(e.target.value)}
+                          placeholder="Buscar por nome, e-mail ou CPF/CNPJ"
+                          className="pl-9"
+                        />
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto rounded-md border">
+                        {tenantResults.length === 0 ? (
+                          <p className="p-3 text-sm text-gray-500">
+                            Nenhum inquilino encontrado. Cadastre-o em Inquilinos antes de ocupar o imóvel.
+                          </p>
+                        ) : (
+                          tenantResults.map((tenant) => (
+                            <button
+                              key={tenant.id}
+                              type="button"
+                              onClick={() => {
+                                handleInputChange("tenant_id", tenant.id)
+                                setTenantSearch("")
+                              }}
+                              className="flex w-full items-center justify-between gap-2 border-b px-3 py-2 text-left last:border-b-0 hover:bg-gray-50"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">{tenant.name}</p>
+                                <p className="truncate text-xs text-gray-600">{tenant.email}</p>
+                              </div>
+                              {tenant.property_name && (
+                                <span className="shrink-0 text-xs text-gray-500">
+                                  {tenant.property_name}
+                                </span>
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* O desvínculo já aconteceu no estado do formulário; o aviso
+                  explica o que o "Salvar" vai encerrar do outro lado. */}
+              {property?.status === "occupied" && formData.status === "vacant" && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  Ao salvar, o inquilino será desvinculado deste imóvel e o contrato ativo
+                  dele será encerrado (marcado como inativo). O histórico de cobranças é
+                  preservado.
+                </p>
+              )}
             </TabsContent>
 
             <TabsContent value="details" className="space-y-4">
@@ -436,12 +570,9 @@ export function PropertyDialog({ open, onOpenChange, property, onSave }: Propert
                     id="area"
                     type="text"
                     inputMode="decimal"
-                    value={formData.area || ''}
-                    onChange={(e) => {
-                      const masked = areaMask(e.target.value)
-                      handleInputChange("area", masked ? parseFloat(masked) : '')
-                    }}
-                    placeholder="Ex: 85.5"
+                    value={areaMask(formData.area)}
+                    onChange={(e) => handleInputChange("area", areaMask(e.target.value))}
+                    placeholder="Ex: 85,5"
                     required
                   />
                 </div>

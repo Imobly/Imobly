@@ -1,9 +1,18 @@
 export interface User {
+  /** Id da tabela local (ex: "2") — usar em rotas da API. */
   id: string;
   email: string;
   name: string;
   created_at?: string;
   updated_at?: string;
+  /**
+   * UID do Supabase Auth — é o que `auth.uid()` devolve dentro das policies
+   * de RLS, e portanto o único valor válido como primeira pasta no caminho
+   * dos uploads. Opcional porque sessões em cache anteriores à sua
+   * introdução não o têm; nesse caso o upload falha com aviso pedindo novo
+   * login, em vez de gravar em pasta errada.
+   */
+  supabase_uid?: string;
 }
 
 export interface LoginRequest {

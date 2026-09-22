@@ -98,15 +98,23 @@ function validateFile(
 
 /**
  * Faz upload de um único arquivo para o Supabase Storage.
- * - Bucket `public-assets`: retorna publicUrl
- * - Bucket `private-documents`: retorna apenas path (use getSignedUrl para acessar)
+ * - Bucket `property-images` (público): retorna publicUrl
+ * - Buckets privados: retorna apenas path (use getSignedUrl para acessar)
  */
 export async function uploadFile(
   file: File,
   options: UploadOptions,
 ): Promise<UploadResult> {
   const { bucket, category, entityId, userId } = options
-  const allowedTypes = bucket === 'public-assets' ? ALLOWED_IMAGE_TYPES : ALLOWED_ALL_TYPES
+
+  // O userId tem de ser o UID do Supabase (auth.uid()): as policies de RLS do
+  // Storage comparam a primeira pasta do caminho com ele. Vazio significa
+  // sessão em cache de antes desse campo existir — falhar aqui é melhor que
+  // gravar numa pasta que o dono não consegue ler depois.
+  if (!userId) {
+    throw new Error('Sessão desatualizada. Saia e entre novamente para enviar arquivos.')
+  }
+  const allowedTypes = bucket === 'property-images' ? ALLOWED_IMAGE_TYPES : ALLOWED_ALL_TYPES
 
   validateFile(file, allowedTypes)
 
@@ -126,7 +134,7 @@ export async function uploadFile(
 
   const result: UploadResult = { path }
 
-  if (bucket === 'public-assets') {
+  if (bucket === 'property-images') {
     const { data } = client.storage.from(bucket).getPublicUrl(path)
     result.publicUrl = data.publicUrl
   }
@@ -177,15 +185,18 @@ export async function deleteFile(
 /**
  * Gera uma URL temporária (signed) para acessar um arquivo no bucket privado.
  * @param path Caminho do arquivo no bucket
+ * @param bucket Bucket onde o arquivo está — inquilinos e despesas usam
+ *   buckets privados distintos, então o chamador precisa informar qual.
  * @param expiresIn Duração em segundos (padrão: 1 hora)
  */
 export async function getSignedUrl(
   path: string,
+  bucket: StorageBucket,
   expiresIn: number = 3600,
 ): Promise<string> {
   const client = await getAuthenticatedClient()
   const { data, error } = await client.storage
-    .from('private-documents')
+    .from(bucket)
     .createSignedUrl(path, expiresIn)
 
   if (error || !data?.signedUrl) {
@@ -200,7 +211,7 @@ export async function getSignedUrl(
 // ============================================
 
 /**
- * Upload de imagens de imóveis → bucket `public-assets`
+ * Upload de imagens de imóveis → bucket `property-images`
  * Retorna array de publicUrls.
  */
 export async function uploadPropertyImages(
@@ -210,7 +221,7 @@ export async function uploadPropertyImages(
   onProgress?: (percent: number) => void,
 ): Promise<UploadResult[]> {
   return uploadMultipleFiles(files, {
-    bucket: 'public-assets',
+    bucket: 'property-images',
     category: 'imoveis',
     entityId: propertyId,
     userId,
@@ -219,7 +230,7 @@ export async function uploadPropertyImages(
 }
 
 /**
- * Upload de documentos de inquilinos → bucket `private-documents`
+ * Upload de documentos de inquilinos → bucket `tenant-documents`
  * Retorna array de paths (usar getSignedUrl para acesso).
  */
 export async function uploadTenantDocuments(
@@ -229,7 +240,7 @@ export async function uploadTenantDocuments(
   onProgress?: (percent: number) => void,
 ): Promise<UploadResult[]> {
   return uploadMultipleFiles(files, {
-    bucket: 'private-documents',
+    bucket: 'tenant-documents',
     category: 'inquilinos',
     entityId: tenantId,
     userId,
@@ -238,7 +249,7 @@ export async function uploadTenantDocuments(
 }
 
 /**
- * Upload de documentos/comprovantes de despesas → bucket `private-documents`
+ * Upload de documentos/comprovantes de despesas → bucket `expense-documents`
  * Retorna array de paths (usar getSignedUrl para acesso).
  */
 export async function uploadExpenseDocuments(
@@ -248,7 +259,7 @@ export async function uploadExpenseDocuments(
   onProgress?: (percent: number) => void,
 ): Promise<UploadResult[]> {
   return uploadMultipleFiles(files, {
-    bucket: 'private-documents',
+    bucket: 'expense-documents',
     category: 'despesas',
     entityId: expenseId,
     userId,

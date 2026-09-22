@@ -9,6 +9,7 @@ import { Payment } from "@/lib/types/payment"
 import { useProperties } from "@/lib/hooks/useProperties"
 import { useTenants } from "@/lib/hooks/useTenants"
 import { useMemo } from "react"
+import { formatCurrency, formatDate } from '@/lib/utils/format'
 
 interface PaymentCardProps {
   payment: Payment
@@ -45,13 +46,10 @@ export function PaymentCard({ payment, onEdit }: PaymentCardProps) {
     return tenants.find(t => t.id === payment.tenant_id)
   }, [payment.tenant, payment.tenant_id, tenants])
 
-  const getDaysOverdue = () => {
-    if (payment.status !== "atrasado") return 0
-    const today = new Date()
-    const dueDate = new Date(payment.dueDate)
-    const diffTime = today.getTime() - dueDate.getTime()
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  }
+  // Os dias de atraso vêm do servidor, junto do saldo. Recalcular aqui com
+  // `new Date()` dava resultado diferente do backend na virada do dia, porque
+  // o backend trabalha no fuso de São Paulo e o navegador no fuso do usuário.
+  const diasDeAtraso = payment.daysOverdue ?? 0
 
   return (
     <Card className="hover:shadow-lg transition-shadow">
@@ -65,10 +63,10 @@ export function PaymentCard({ payment, onEdit }: PaymentCardProps) {
               >
                 {statusConfig[payment.status as keyof typeof statusConfig].label}
               </Badge>
-              {payment.status === "atrasado" && (
+              {diasDeAtraso > 0 && payment.balanceAmount > 0 && (
                 <Badge variant="secondary" className="bg-red-100 text-red-800 flex items-center">
                   <AlertTriangle className="mr-1 h-3 w-3" />
-                  {getDaysOverdue()} dias
+                  {diasDeAtraso} dias
                 </Badge>
               )}
             </div>
@@ -118,8 +116,8 @@ export function PaymentCard({ payment, onEdit }: PaymentCardProps) {
         <div className="flex items-center text-sm text-muted-foreground">
           <Calendar className="mr-2 h-3 w-3" />
           <div>
-            <div>Vencimento: {new Date(payment.dueDate).toLocaleDateString("pt-BR")}</div>
-            {payment.paymentDate && <div>Pagamento: {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}</div>}
+            <div>Vencimento: {formatDate(payment.dueDate)}</div>
+            {payment.paymentDate && <div>Pagamento: {formatDate(payment.paymentDate)}</div>}
           </div>
         </div>
 
@@ -133,17 +131,33 @@ export function PaymentCard({ payment, onEdit }: PaymentCardProps) {
         <div className="space-y-1 pt-2 border-t">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Valor:</span>
-            <span>R$ {payment.amount.toLocaleString("pt-BR")}</span>
+            <span>{formatCurrency(payment.amount)}</span>
           </div>
           {payment.fineAmount > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Multa:</span>
-              <span className="text-red-600">R$ {payment.fineAmount.toLocaleString("pt-BR")}</span>
+              <span className="text-red-600">{formatCurrency(payment.fineAmount)}</span>
             </div>
           )}
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Total devido:</span>
+            <span>{formatCurrency(payment.totalAmount)}</span>
+          </div>
+          {payment.paidAmount > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Recebido:</span>
+              <span className="text-green-700">
+                {formatCurrency(payment.paidAmount)}
+              </span>
+            </div>
+          )}
+          {/* O saldo é o que ainda se cobra. O card antigo mostrava só um
+              "Total" que, em pagamento parcial, era o valor JÁ PAGO. */}
           <div className="flex justify-between font-bold">
-            <span>Total:</span>
-            <span>R$ {payment.totalAmount.toLocaleString("pt-BR")}</span>
+            <span>{payment.balanceAmount > 0 ? "Saldo devedor:" : "Quitado"}</span>
+            <span className={payment.balanceAmount > 0 ? "text-red-600" : "text-green-700"}>
+              {formatCurrency(payment.balanceAmount)}
+            </span>
           </div>
         </div>
       </CardContent>

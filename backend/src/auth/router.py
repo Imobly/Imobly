@@ -126,6 +126,9 @@ def _user_response(current_user: dict, auth_repo: AuthRepository) -> UserRespons
         full_name=local_user.full_name if local_user else None,
         created_at=local_user.created_at.isoformat() if local_user and local_user.created_at else "",
         updated_at=local_user.updated_at.isoformat() if local_user and local_user.updated_at else None,
+        # Vem do token, não da tabela local: é a identidade que o Storage
+        # enxerga em auth.uid().
+        supabase_uid=current_user["id"],
     )
 
 

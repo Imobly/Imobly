@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { MoreHorizontal, Edit, Trash2, Eye, MapPin } from "lucide-react"
 import { Property } from "@/lib/types/property"
 import { useTenants } from "@/lib/hooks/useTenants"
+import { formatCurrency } from '@/lib/utils/format'
 
 interface PropertyListProps {
   properties: Property[]
@@ -17,12 +18,14 @@ const statusConfig = {
   occupied: { label: "Ocupado", className: "bg-green-100 text-green-800" },
   vacant: { label: "Vago", className: "bg-gray-100 text-gray-800" },
   maintenance: { label: "Manutenção", className: "bg-orange-100 text-orange-800" },
+  inactive: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
 }
 
 const typeConfig = {
   apartment: "Apartamento",
   house: "Casa",
   commercial: "Comercial",
+  studio: "Studio",
 }
 
 export function PropertyList({ properties, onEdit }: PropertyListProps) {
@@ -54,7 +57,7 @@ export function PropertyList({ properties, onEdit }: PropertyListProps) {
                   </div>
                 </div>
               </TableCell>
-              <TableCell>{typeConfig[property.type as keyof typeof typeConfig]}</TableCell>
+              <TableCell>{typeConfig[property.type as keyof typeof typeConfig] ?? property.type}</TableCell>
               <TableCell>{property.area}m²</TableCell>
               <TableCell>
                 <div className="text-sm">
@@ -64,13 +67,16 @@ export function PropertyList({ properties, onEdit }: PropertyListProps) {
                 </div>
               </TableCell>
               <TableCell>{property.tenant_id ? (tenants.find(t => t.id === property.tenant_id)?.name || `#${property.tenant_id}`) : "-"}</TableCell>
-              <TableCell className="font-medium">R$ {property.rent.toLocaleString("pt-BR")}</TableCell>
+              <TableCell className="font-medium">{formatCurrency(property.rent)}</TableCell>
               <TableCell>
                 <Badge
                   variant="secondary"
-                  className={statusConfig[property.status as keyof typeof statusConfig].className}
+                  className={
+                    (statusConfig[property.status as keyof typeof statusConfig] ?? statusConfig.vacant)
+                      .className
+                  }
                 >
-                  {statusConfig[property.status as keyof typeof statusConfig].label}
+                  {(statusConfig[property.status as keyof typeof statusConfig] ?? statusConfig.vacant).label}
                 </Badge>
               </TableCell>
               <TableCell>

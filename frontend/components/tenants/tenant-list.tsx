@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { MoreHorizontal, Edit, Trash2, Eye, Building2 } from "lucide-react"
+import { formatCurrency } from '@/lib/utils/format'
 
 interface Tenant {
   id: number
@@ -96,7 +97,7 @@ export function TenantList({ tenants, onEdit, onDelete }: TenantListProps) {
               </TableCell>
               <TableCell>
                 {tenant.rent > 0 ? (
-                  <span className="font-medium">R$ {tenant.rent.toLocaleString("pt-BR")}</span>
+                  <span className="font-medium">{formatCurrency(tenant.rent)}</span>
                 ) : (
                   <span className="text-muted-foreground">-</span>
                 )}

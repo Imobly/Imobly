@@ -16,6 +16,7 @@ import {
   TrendingDown,
   Activity,
 } from "lucide-react"
+import { formatCurrency, formatDateTime } from '@/lib/utils/format'
 
 interface SystemStatus {
   name: string
@@ -166,7 +167,7 @@ export function StatusView() {
                   <Progress value={system.uptime} className="h-2" />
 
                   <div className="text-xs text-muted-foreground">
-                    Última verificação: {new Date(system.lastCheck).toLocaleString("pt-BR")}
+                    Última verificação: {formatDateTime(system.lastCheck)}
                   </div>
 
                   {system.issues && system.issues.length > 0 && (
@@ -245,7 +246,7 @@ export function StatusView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-success">
-              R$ {operationalMetrics.monthlyRevenue.toLocaleString("pt-BR")}
+              {formatCurrency(operationalMetrics.monthlyRevenue)}
             </div>
             <p className="text-xs text-muted-foreground">Este mês</p>
           </CardContent>
@@ -258,7 +259,7 @@ export function StatusView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-danger">
-              R$ {operationalMetrics.monthlyExpenses.toLocaleString("pt-BR")}
+              {formatCurrency(operationalMetrics.monthlyExpenses)}
             </div>
             <p className="text-xs text-muted-foreground">Este mês</p>
           </CardContent>
@@ -270,7 +271,7 @@ export function StatusView() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ {netIncome.toLocaleString("pt-BR")}</div>
+            <div className="text-2xl font-bold">{formatCurrency(netIncome)}</div>
             <p className="text-xs text-muted-foreground">Margem: {profitMargin.toFixed(1)}%</p>
           </CardContent>
         </Card>

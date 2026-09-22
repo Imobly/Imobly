@@ -3,8 +3,12 @@ import { ApiError } from '@/lib/types/api'
 
 // Get base URL based on environment
 const getBaseURL = () => {
-  // Always use absolute URL to access backend directly
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+  // next.config.mjs sempre injeta NEXT_PUBLIC_API_URL: a URL absoluta do
+  // backend em produção, '/api/v1' em desenvolvimento (o rewrite encaminha por
+  // imobly-backend:8000 na rede Docker). O fallback fica relativo de
+  // propósito — apontar para localhost:8000 quebra o login quando outro
+  // processo do host ocupa essa porta.
+  return process.env.NEXT_PUBLIC_API_URL || '/api/v1'
 }
 
 // Configuração base do cliente HTTP

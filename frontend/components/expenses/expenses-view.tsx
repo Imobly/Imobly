@@ -10,6 +10,7 @@ import { useProperties } from "@/lib/hooks/useProperties"
 import { ExpenseDialog } from "@/components/expenses/expense-dialog"
 import { EmptyState } from "@/components/ui/empty-state"
 import { currencyFormat } from "@/lib/utils"
+import { formatCurrency, formatDate } from '@/lib/utils/format'
 
 export function ExpensesView() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -235,7 +236,7 @@ export function ExpensesView() {
                         </div>
                       </td>
                       <td className="p-3 text-right font-semibold">
-                        {expense.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatCurrency(expense.amount)}
                       </td>
                       <td className="p-3 text-center">
                         <span className="text-sm">{property?.name || 'N/A'}</span>
@@ -251,7 +252,7 @@ export function ExpensesView() {
                         </span>
                       </td>
                       <td className="p-3 text-center text-sm">
-                        {new Date(expense.date).toLocaleDateString('pt-BR')}
+                        {formatDate(expense.date)}
                       </td>
                       <td className="p-3 text-center">
                         <div className="flex gap-1 justify-center">
@@ -328,10 +329,10 @@ export function ExpensesView() {
                   <div className="space-y-1">
                     <p className="text-sm text-gray-600">Categoria: {expense.category}</p>
                     <p className="text-lg font-semibold">
-                      {expense.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {formatCurrency(expense.amount)}
                     </p>
                     <p className="text-sm text-gray-500">
-                      Data: {new Date(expense.date).toLocaleDateString('pt-BR')}
+                      Data: {formatDate(expense.date)}
                     </p>
                     <p className="text-sm text-gray-500">
                       Propriedade ID: {expense.property_id}
