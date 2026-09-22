@@ -3,9 +3,10 @@
 import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { CompositionBar } from "@/components/ui/composition-bar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Search, AlertTriangle, TrendingUp, CheckCircle, Clock, XCircle, RefreshCw, DollarSign, PieChart } from "lucide-react"
+import { Plus, Search, AlertTriangle, RefreshCw, DollarSign } from "lucide-react"
 import { usePayments } from "@/lib/hooks/usePayments"
 import { useProperties } from "@/lib/hooks/useProperties"
 import { useTenants } from "@/lib/hooks/useTenants"
@@ -178,17 +179,16 @@ export function PaymentsView() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pagamentos</h1>
-          <p className="text-gray-600">Gerencie pagamentos e aluguéis</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Pagamentos</h1>
+          <p className="text-muted-foreground text-sm">
+            Situação de cada cobrança e quanto ainda falta receber.
+          </p>
         </div>
-        <Button 
-          className="bg-blue-600 hover:bg-blue-700"
-          onClick={handleCreatePayment}
-        >
+        <Button onClick={handleCreatePayment}>
           <Plus className="mr-2 h-4 w-4" />
-          Novo Pagamento
+          Novo pagamento
         </Button>
       </div>
 
@@ -268,76 +268,26 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {/* Status Cards — os quatro status são EXCLUSIVOS entre si: cada
-          cobrança está em um e só um deles, e as contagens abaixo somam o
-          total. O que responde "quanto ainda falta" não é o status, é o saldo
-          devedor que aparece embaixo de cada card. */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Cobranças</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statusCounts.total}</div>
-            <p className="text-xs text-muted-foreground">
-              {currencyFormat(balanceAmount)} a receber
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pagas</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{statusCounts.paid}</div>
-            <p className="text-xs text-muted-foreground">
-              {currencyFormat(paidAmount)} recebidos
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{statusCounts.pending}</div>
-            <p className="text-xs text-muted-foreground">
-              Nada recebido, ainda no prazo · {currencyFormat(pendingAmount)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Parciais</CardTitle>
-            <PieChart className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{statusCounts.partial}</div>
-            <p className="text-xs text-muted-foreground">
-              Recebido em parte · {currencyFormat(partialAmount)} de saldo
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Em Atraso</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{statusCounts.overdue}</div>
-            <p className="text-xs text-muted-foreground">
-              Nada recebido, prazo vencido · {currencyFormat(overdueAmount)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Composição das cobranças — os quatro status são EXCLUSIVOS entre si:
+          cada cobrança está em um e só um deles, e as fatias somam o total. O
+          que responde "quanto ainda falta" não é o status, é o saldo devedor,
+          que fica à direita. */}
+      <CompositionBar
+        label="Cobranças"
+        total={statusCounts.total}
+        unit={statusCounts.total === 1 ? "cobrança" : "cobranças"}
+        segments={[
+          { label: "Pagas", value: statusCounts.paid, color: "var(--positive)" },
+          { label: "Parciais", value: statusCounts.partial, color: "var(--chart-6)" },
+          { label: "Pendentes", value: statusCounts.pending, color: "var(--brand-300)" },
+          { label: "Em atraso", value: statusCounts.overdue, color: "var(--critical)" },
+        ]}
+        aside={{
+          label: "A receber",
+          value: currencyFormat(balanceAmount),
+          caption: `${currencyFormat(paidAmount)} já recebidos`,
+        }}
+      />
 
       {/* Content */}
       {payments.length === 0 ? (

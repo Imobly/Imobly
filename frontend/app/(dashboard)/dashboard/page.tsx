@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { currencyFormat } from '@/lib/utils'
+import { ResultEquation } from '@/components/ui/result-equation'
 import { usePropertiesStatus } from '@/lib/hooks/useDashboard'
 import { usePayments } from '@/lib/hooks/usePayments'
 import { useExpenses } from '@/lib/hooks/useExpenses'
@@ -29,11 +30,17 @@ import {
   Cell,
 } from 'recharts'
 
-const BLUE = '#2563eb'
-const RED = '#ef4444'
-const GREEN = '#22c55e'
-const AMBER = '#f59e0b'
-const PIE_COLORS = [BLUE, RED, AMBER] // occupied, vacant, maintenance
+/*
+ * Séries de gráfico do sistema (ver app/globals.css). Recharts recebe `fill`
+ * como string, então os valores são literais aqui em vez de var(--chart-n) —
+ * mas são exatamente os mesmos tokens, para o painel não destoar do resto.
+ */
+const BLUE = '#095bbd'
+const SKY = '#80bcee'
+const GREEN = '#0b7a62'
+const AMBER = '#e2872f'
+const PURPLE = '#9b2fb4'
+const PIE_COLORS = [BLUE, SKY, AMBER] // occupied, vacant, maintenance
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -47,11 +54,12 @@ const TYPE_COLORS: Record<string, string> = {
   apartment: BLUE,
   house: GREEN,
   commercial: AMBER,
-  studio: '#8b5cf6',
+  studio: PURPLE,
 }
 
-// Palette for expense category donut chart
-const DONUT_COLORS = ['#2563eb', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+// Palette for expense category donut chart — mesma família, luminâncias
+// distintas, para as fatias continuarem separáveis em tons de cinza.
+const DONUT_COLORS = [BLUE, '#2e7ccb', SKY, GREEN, PURPLE, AMBER, '#5b7086', '#c06fd4']
 
 export default function DashboardPage() {
   // Data hooks
@@ -186,7 +194,7 @@ export default function DashboardPage() {
       .map(([type, count]) => ({
         name: TYPE_LABELS[type] || type,
         value: count,
-        fill: TYPE_COLORS[type] || '#94a3b8',
+        fill: TYPE_COLORS[type] || '#5b7086',
       }))
       .sort((a, b) => b.value - a.value)
   }, [propertiesStatus])
@@ -252,8 +260,8 @@ export default function DashboardPage() {
         {/* Título */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">Visão financeira e operacional</p>
+            <h1 className="font-display text-3xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground text-sm">Visão financeira e operacional da carteira</p>
           </div>
         </div>
 
@@ -312,39 +320,19 @@ export default function DashboardPage() {
         {/* ═══════════════════════════════════════════════════════════ */}
         <section>
           <div className="flex items-center gap-2 mb-4">
-            <BarIcon className="h-5 w-5 text-blue-600" />
+            <BarIcon className="text-primary h-5 w-5" />
             <h2 className="text-xl font-semibold">Visão Financeira</h2>
           </div>
 
-          {/* KPI Cards */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">Receita total</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{currencyFormat(finance.receitaTotal)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">Despesas totais</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">{currencyFormat(finance.despesasTotal)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">Lucro / Resultado</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${finance.resultado >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {currencyFormat(finance.resultado)}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Receita, despesa e resultado são uma conta só — três cartões
+              lado a lado escondiam isso. Na mesma escala, a proporção entre
+              eles fica visível. */}
+          <ResultEquation
+            revenue={finance.receitaTotal}
+            expenses={finance.despesasTotal}
+            format={currencyFormat}
+            caption={periodLabel}
+          />
 
           {/* Charts: Despesas donut + Ganhos por Imóvel */}
           <div className="grid gap-6 md:grid-cols-2 mt-6">

@@ -82,7 +82,8 @@ export function ExpenseChart({ expenses }: ExpenseChartProps) {
     return acc
   }, [] as any[])
 
-  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#82CA9D", "#FFC658", "#FF7C7C"]
+  // Séries do sistema (app/globals.css): mesma família, luminâncias distintas.
+  const COLORS = ["#095bbd", "#2e7ccb", "#80bcee", "#0b7a62", "#9b2fb4", "#e2872f", "#5b7086", "#c06fd4"]
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -132,7 +133,7 @@ export function ExpenseChart({ expenses }: ExpenseChartProps) {
                   labelLine={false}
                   label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="#095bbd"
                   dataKey="value"
                 >
                   {categoryData.map((entry, index) => (

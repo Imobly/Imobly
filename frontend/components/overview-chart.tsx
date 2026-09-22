@@ -54,9 +54,9 @@ export function OverviewChart({ period = "6months" }: OverviewChartProps) {
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart data={chartData}>
-        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+        <XAxis dataKey="name" stroke="#5b7086" fontSize={12} tickLine={false} axisLine={false} />
         <YAxis
-          stroke="#888888"
+          stroke="#5b7086"
           fontSize={12}
           tickLine={false}
           axisLine={false}
@@ -67,8 +67,8 @@ export function OverviewChart({ period = "6months" }: OverviewChartProps) {
           labelStyle={{ color: "#000" }}
         />
         <Legend />
-        <Bar dataKey="receitas" name="Receitas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="despesas" name="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="receitas" name="Receitas" fill="#095bbd" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="despesas" name="Despesas" fill="#e2872f" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )

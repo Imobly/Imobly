@@ -1,11 +1,11 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
+import { AgingRuler, type AgingTone } from "@/components/ui/aging-ruler"
+import { StatusDot } from "@/components/ui/status-dot"
 import {
   Select,
   SelectContent,
@@ -34,13 +34,16 @@ const FILTROS: { value: string; label: string }[] = [
   { value: "quitada", label: "Quitadas" },
 ]
 
-const CORES_AGING: Record<string, string> = {
-  a_vencer: "text-blue-600",
-  d1_30: "text-amber-600",
-  d31_60: "text-orange-600",
-  d61_90: "text-red-600",
-  d90_mais: "text-red-800",
+const TOM_AGING: Record<string, AgingTone> = {
+  a_vencer: "info",
+  d1_30: "warning",
+  d31_60: "warning",
+  d61_90: "critical",
+  d90_mais: "critical",
 }
+
+/** Ordem da régua — a API pode devolver os buckets em qualquer ordem. */
+const ORDEM_AGING = ["d1_30", "d31_60", "d61_90", "d90_mais"]
 
 export function ChargesView() {
   const [filtro, setFiltro] = useState<string>("em_aberto")
@@ -78,6 +81,30 @@ export function ChargesView() {
     }
   }, [charges])
 
+  // A régua precisa das quatro faixas sempre, inclusive as zeradas: saber que
+  // não há nada entre 0 e 30 dias é informação, não ausência de informação.
+  const colunasAging = useMemo(() => {
+    const porBucket = new Map(
+      (aging?.buckets ?? []).map((b) => [b.bucket, b])
+    )
+    const rotulosPadrao: Record<string, string> = {
+      d1_30: "1–30 dias",
+      d31_60: "31–60 dias",
+      d61_90: "61–90 dias",
+      d90_mais: "Mais de 90 dias",
+    }
+    return ORDEM_AGING.map((bucket) => {
+      const b = porBucket.get(bucket as never)
+      const amount = b?.amount ?? 0
+      return {
+        label: b?.label ?? rotulosPadrao[bucket],
+        amount,
+        formatted: formatBRL(amount),
+        tone: TOM_AGING[bucket],
+      }
+    })
+  }, [aging])
+
   const gerarMes = async () => {
     const criadas = await generate()
     if (criadas === null) {
@@ -109,59 +136,29 @@ export function ChargesView() {
 
   return (
     <div className="space-y-6">
-      {/* ── Resumo ── */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Saldo em aberto
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatBRL(totais.saldo)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              já com multa e juros de hoje
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Cobranças vencidas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{totais.vencidas}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {totais.parciais} com pagamento parcial
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Vencidos por faixa
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {aging ? (
-              aging.buckets
-                .filter((b) => b.bucket !== "a_vencer" && b.amount > 0)
-                .map((b) => (
-                  <div key={b.bucket} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{b.label}</span>
-                    <span className={CORES_AGING[b.bucket]}>{formatBRL(b.amount)}</span>
-                  </div>
-                ))
-            ) : (
-              <span className="text-sm text-muted-foreground">—</span>
-            )}
-            {aging && aging.total_overdue === 0 && (
-              <span className="text-sm text-green-700">Nada vencido.</span>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* ── Resumo: saldo em destaque + régua de atraso ── */}
+      <AgingRuler
+        headlineLabel="Saldo em aberto"
+        headline={formatBRL(totais.saldo)}
+        headlineTone={totais.saldo > 0 ? "critical" : "positive"}
+        badge={
+          totais.vencidas > 0 ? (
+            <StatusDot tone="critical" emphasis>
+              {totais.vencidas} {totais.vencidas === 1 ? "vencida" : "vencidas"}
+            </StatusDot>
+          ) : (
+            <StatusDot tone="positive" emphasis>
+              Nada vencido
+            </StatusDot>
+          )
+        }
+        caption={
+          totais.parciais > 0
+            ? `${totais.parciais} com pagamento parcial · já com multa e juros de hoje`
+            : "já com multa e juros de hoje"
+        }
+        columns={colunasAging}
+      />
 
       {/* ── Ações e filtros ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -211,7 +208,7 @@ export function ChargesView() {
           action={{ label: "Gerar cobranças do mês", onClick: gerarMes }}
         />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {visiveis.map((charge) => (
             <ChargeRow key={charge.id} charge={charge} onReceber={abrirRecebimento} />
           ))}
@@ -244,57 +241,72 @@ function ChargeRow({
     year: "numeric",
   })
 
+  // Quanto do devido já entrou. Três números soltos (devido / recebido /
+  // saldo) obrigam o olho a fazer a conta; a barra faz por ele.
+  const proporcao =
+    position.total_due > 0
+      ? Math.min(100, (position.paid_amount / position.total_due) * 100)
+      : 0
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <article className="bg-card border-border hover:border-brand-300 rounded-2xl border p-4 transition-colors sm:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium truncate">
+            <h3 className="truncate font-semibold">
               {charge.tenant_name || `Inquilino #${charge.tenant_id}`}
-            </span>
+            </h3>
             <ChargeStatusBadge charge={charge} />
             {position.days_overdue > 0 && position.balance > 0 && (
-              <Badge variant="secondary" className="bg-red-100 text-red-800">
-                <AlertTriangle className="mr-1 h-3 w-3" />
+              <StatusDot tone="critical" emphasis>
                 {position.days_overdue} dias
-              </Badge>
+              </StatusDot>
             )}
           </div>
-          <p className="text-sm text-muted-foreground truncate">
+          <p className="text-muted-foreground mt-1 truncate text-sm">
             {charge.property_name || `Imóvel #${charge.property_id}`} · competência {competencia} ·
             vence em {formatDate(charge.due_date)}
           </p>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <div className="text-xs text-muted-foreground">Devido</div>
-            <div className="text-sm">{formatBRL(position.total_due)}</div>
+        <div className="lg:w-72 lg:shrink-0">
+          <div className="text-muted-foreground mb-1.5 flex justify-between text-xs">
+            <span>
+              Recebido{" "}
+              <strong className="text-positive font-bold">
+                {formatBRL(position.paid_amount)}
+              </strong>
+            </span>
+            <span>de {formatBRL(position.total_due)}</span>
           </div>
-          {position.paid_amount > 0 && (
-            <div className="text-right">
-              <div className="text-xs text-muted-foreground">Recebido</div>
-              <div className="text-sm text-green-700">{formatBRL(position.paid_amount)}</div>
-            </div>
-          )}
-          <div className="text-right">
-            {/* O saldo é o número que importa: é o que ainda se cobra. O painel
-                antigo mostrava aqui o valor PAGO nos registros parciais. */}
-            <div className="text-xs text-muted-foreground">Saldo</div>
+          <div className="bg-muted h-2 overflow-hidden rounded-full">
             <div
-              className={`font-bold ${position.balance > 0 ? "text-red-600" : "text-green-700"}`}
-            >
-              {formatBRL(position.balance)}
-            </div>
+              className="bg-positive h-full rounded-full"
+              style={{ width: `${proporcao}%` }}
+            />
           </div>
-          {position.balance > 0 && (
-            <Button size="sm" onClick={() => onReceber(charge)}>
-              <Wallet className="mr-2 h-4 w-4" />
-              Receber
-            </Button>
-          )}
         </div>
-      </CardContent>
-    </Card>
+
+        <div className="lg:w-32 lg:shrink-0 lg:text-right">
+          {/* O saldo é o número que importa: é o que ainda se cobra. O painel
+              antigo mostrava aqui o valor PAGO nos registros parciais. */}
+          <div className="text-muted-foreground text-xs">Saldo</div>
+          <div
+            className={`text-lg font-bold ${
+              position.balance > 0 ? "text-critical" : "text-positive"
+            }`}
+          >
+            {formatBRL(position.balance)}
+          </div>
+        </div>
+
+        {position.balance > 0 && (
+          <Button className="lg:shrink-0" onClick={() => onReceber(charge)}>
+            <Wallet className="mr-2 h-4 w-4" />
+            Receber
+          </Button>
+        )}
+      </div>
+    </article>
   )
 }

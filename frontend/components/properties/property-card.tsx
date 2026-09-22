@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { MapPin, Bed, Bath, Car, Edit, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
+import { StatusDot, type StatusTone } from "@/components/ui/status-dot"
+import { MapPin, Bed, Bath, Car, Edit, Trash2, ChevronLeft, ChevronRight, Building2 } from "lucide-react"
 import Image from "next/image"
 import { Property } from "@/lib/types/property"
 import { useTenants } from "@/lib/hooks/useTenants"
@@ -17,11 +17,11 @@ interface PropertyCardProps {
   onDelete: (id: number) => void
 }
 
-const statusConfig = {
-  occupied: { label: "Ocupado", className: "bg-green-100 text-green-800" },
-  vacant: { label: "Vago", className: "bg-gray-100 text-gray-800" },
-  maintenance: { label: "Manutenção", className: "bg-orange-100 text-orange-800" },
-  inactive: { label: "Inativo", className: "bg-gray-100 text-gray-800" },
+const statusConfig: Record<string, { label: string; tone: StatusTone }> = {
+  occupied: { label: "Ocupado", tone: "brand" },
+  vacant: { label: "Vago", tone: "info" },
+  maintenance: { label: "Manutenção", tone: "warning" },
+  inactive: { label: "Inativo", tone: "neutral" },
 }
 
 const typeConfig = {
@@ -36,7 +36,7 @@ export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) 
   const [showDetailDialog, setShowDetailDialog] = useState(false)
   const { tenants } = useTenants()
   const tenantName = property.tenant_id ? tenants.find(t => t.id === property.tenant_id)?.name : undefined
-  
+
   // Construir URLs completas das imagens.
   //
   // As fotos vêm do Supabase Storage com URL absoluta, tratada pelo
@@ -45,9 +45,12 @@ export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) 
   // path relativo legado — e fica relativo ao próprio frontend, sem apontar
   // para localhost:8000, porta que outro projeto pode estar ocupando.
   const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ?? ''
-  const images = property.images && property.images.length > 0 
-    ? property.images.map(img => img.startsWith('http') ? img : `${baseUrl}${img}`)
-    : ["/placeholder.svg"]
+  const images = (property.images ?? []).map(img =>
+    img.startsWith('http') ? img : `${baseUrl}${img}`
+  )
+  const hasImages = images.length > 0
+
+  const status = statusConfig[property.status as keyof typeof statusConfig] ?? statusConfig.vacant
 
   const handleDelete = () => {
     onDelete(property.id)
@@ -65,157 +68,173 @@ export function PropertyCard({ property, onEdit, onDelete }: PropertyCardProps) 
 
   return (
     <>
-      <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setShowDetailDialog(true)}>
-        <div className="relative h-48 group">
-        <Image 
-          src={images[currentImageIndex]} 
-          alt={property.name} 
-          fill 
-          className="object-cover" 
-        />
-        
-        {/* Navigation Arrows */}
-        {images.length > 1 && (
-          <>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handlePreviousImage}
+      <Card
+        className="group hover:border-brand-300 cursor-pointer gap-0 overflow-hidden py-0 shadow-none transition-colors hover:shadow-md"
+        onClick={() => setShowDetailDialog(true)}
+      >
+        <div className="relative h-44">
+          {hasImages ? (
+            <Image
+              src={images[currentImageIndex]}
+              alt={property.name}
+              fill
+              className="object-cover"
+            />
+          ) : (
+            /* Sem foto, uma chapa em papel-quadriculado da própria marca. O
+               placeholder cinza anterior dominava o card e fazia a carteira
+               inteira parecer vazia. */
+            <div
+              className="bg-brand-50 flex h-full items-center justify-center"
+              style={{
+                backgroundImage:
+                  'repeating-linear-gradient(0deg, rgba(9,91,189,.07) 0 1px, transparent 1px 28px), repeating-linear-gradient(90deg, rgba(9,91,189,.07) 0 1px, transparent 1px 28px)',
+              }}
             >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handleNextImage}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            
-            {/* Image Indicators */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-              {images.map((_, index) => (
-                <div
-                  key={index}
-                  className={`h-1.5 rounded-full transition-all ${
-                    index === currentImageIndex 
-                      ? 'w-4 bg-white' 
-                      : 'w-1.5 bg-white/50'
-                  }`}
-                />
-              ))}
+              <Building2 className="text-brand-300 h-14 w-14" strokeWidth={1.1} aria-hidden />
             </div>
-          </>
-        )}
+          )}
 
-        <div className="absolute top-2 right-2 flex gap-2">
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            className="h-8 w-8 p-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit(property)
-            }}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="destructive" 
-            size="sm" 
-            className="h-8 w-8 p-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              handleDelete()
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="absolute top-2 left-2">
+          {/* Navigation Arrows */}
+          {images.length > 1 && (
+            <>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute top-1/2 left-2 size-8 -translate-y-1/2 bg-white/90 opacity-0 transition-opacity group-hover:opacity-100"
+                onClick={handlePreviousImage}
+                aria-label="Foto anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute top-1/2 right-2 size-8 -translate-y-1/2 bg-white/90 opacity-0 transition-opacity group-hover:opacity-100"
+                onClick={handleNextImage}
+                aria-label="Próxima foto"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+
+              {/* Image Indicators */}
+              <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1">
+                {images.map((_, index) => (
+                  <div
+                    key={index}
+                    className={`h-1.5 rounded-full transition-all ${
+                      index === currentImageIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/50'
+                    }`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Ações: só no hover. Antes um botão vermelho cheio de excluir ficava
+              aceso em todos os cards da grade ao mesmo tempo. */}
+          <div className="absolute top-3 right-3 flex gap-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 bg-white"
+              aria-label={`Editar ${property.name}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit(property)
+              }}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="text-critical-strong border-critical-soft hover:bg-critical-soft size-9 bg-white"
+              aria-label={`Excluir ${property.name}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDelete()
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+
           {/* Acesso defensivo: um status fora do mapa (ex.: vindo direto da
               API antes de um novo valor ser cadastrado aqui) não pode
-              derrubar o card inteiro com "Cannot read properties of
-              undefined". */}
-          <Badge
-            variant="secondary"
-            className={
-              (statusConfig[property.status as keyof typeof statusConfig] ?? statusConfig.vacant)
-                .className
-            }
-          >
-            {(statusConfig[property.status as keyof typeof statusConfig] ?? statusConfig.vacant).label}
-          </Badge>
+              derrubar o card inteiro. */}
+          <div className="absolute top-3 left-3 rounded-full bg-white px-3 py-1.5 shadow-sm">
+            <StatusDot tone={status.tone}>{status.label}</StatusDot>
+          </div>
         </div>
-      </div>
 
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-3.5 p-5">
           <div>
-            <h3 className="font-semibold text-lg">{property.name}</h3>
-            <div className="flex items-center text-sm text-muted-foreground mt-1">
-              <MapPin className="mr-1 h-3 w-3" />
-              {property.address}, {property.neighborhood}
-            </div>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="pt-0">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Tipo:</span>
-            <span>{typeConfig[property.type as keyof typeof typeConfig] ?? property.type}</span>
+            <h3 className="leading-snug font-bold">{property.name}</h3>
+            <p className="text-muted-foreground mt-1 flex items-center gap-1.5 text-sm">
+              <MapPin className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{property.address}, {property.neighborhood}</span>
+            </p>
           </div>
 
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Área:</span>
+          <div className="bg-hairline h-px" />
+
+          {/* Tipo, área e cômodos numa linha só: são qualificadores do imóvel,
+              não três fatos que merecem uma linha cada. */}
+          <div className="text-foreground/80 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span className="font-semibold">
+              {typeConfig[property.type as keyof typeof typeConfig] ?? property.type}
+            </span>
+            <span className="text-neutral-track">·</span>
             <span>{property.area}m²</span>
-          </div>
-
-          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
             {property.bedrooms > 0 && (
-              <div className="flex items-center">
-                <Bed className="mr-1 h-3 w-3" />
-                {property.bedrooms}
-              </div>
+              <>
+                <span className="text-neutral-track">·</span>
+                <span className="flex items-center gap-1">
+                  <Bed className="text-muted-foreground h-4 w-4" />
+                  {property.bedrooms}
+                </span>
+              </>
             )}
-            <div className="flex items-center">
-              <Bath className="mr-1 h-3 w-3" />
+            <span className="flex items-center gap-1">
+              <Bath className="text-muted-foreground h-4 w-4" />
               {property.bathrooms}
-            </div>
+            </span>
             {property.parkingSpaces > 0 && (
-              <div className="flex items-center">
-                <Car className="mr-1 h-3 w-3" />
+              <span className="flex items-center gap-1">
+                <Car className="text-muted-foreground h-4 w-4" />
                 {property.parkingSpaces}
-              </div>
+              </span>
             )}
           </div>
 
           {tenantName && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Inquilino:</span>
-              <span>{tenantName}</span>
-            </div>
+            <p className="text-muted-foreground truncate text-sm">
+              Inquilino: <span className="text-foreground font-medium">{tenantName}</span>
+            </p>
           )}
 
-          <div className="flex items-center justify-between pt-2 border-t">
-            <span className="text-lg font-bold">{formatCurrency(property.rent)}</span>
-            <span className="text-xs text-muted-foreground">/mês</span>
+          <div className="bg-hairline h-px" />
+
+          <div>
+            <p className="text-muted-foreground text-xs">Aluguel</p>
+            <p className="flex items-baseline gap-1.5">
+              <span className="font-display text-xl font-bold tracking-tight">
+                {formatCurrency(property.rent)}
+              </span>
+              <span className="text-muted-foreground text-xs">/mês</span>
+            </p>
           </div>
         </div>
-      </CardContent>
-    </Card>
-    
-    <PropertyDetailDialog
-      open={showDetailDialog}
-      onOpenChange={setShowDetailDialog}
-      property={property}
-      onEdit={onEdit}
-      onDelete={onDelete}
-    />
+      </Card>
+
+      <PropertyDetailDialog
+        open={showDetailDialog}
+        onOpenChange={setShowDetailDialog}
+        property={property}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
     </>
   )
 }

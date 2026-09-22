@@ -3,117 +3,175 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Paleta Imobly — tirada do próprio logotipo (public/logo-icon.svg): o azul
+ * #095BBD com os apoios céu (#80BCEE) e gelo (#CAEBFD). O valor anterior,
+ * `oklch(0.5 0.2 240)`, era o azul genérico do template, não o da marca.
+ *
+ * Regra de superfície: fundo levemente azulado, cartão branco e fio de 1px.
+ * Sombra só quando algo sobe (hover, menu, diálogo) — não em repouso.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  /* Alterando primary para azul */
-  --primary: oklch(0.5 0.2 240);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.97 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  /* Atualizando cores da sidebar para fundo branco e seleção azul */
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.5 0.2 240);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --brand-50: #eaf4fe;
+  --brand-100: #caebfd;
+  --brand-300: #80bcee;
+  --brand-500: #2e7ccb;
+  --brand-600: #095bbd;
+  --brand-700: #084b9e;
+  --brand-ink: #0c1d30;
 
-  /* Atualizando cores de status - verde para ativo, vermelho para inativo */
-  --status-active: oklch(0.646 0.222 142.495);
-  --status-active-foreground: oklch(0.985 0 0);
-  --status-inactive: oklch(0.577 0.245 27.325);
-  --status-inactive-foreground: oklch(0.985 0 0);
-  --status-paid: oklch(0.646 0.222 142.495);
-  --status-paid-foreground: oklch(0.985 0 0);
-  --status-pending: oklch(0.828 0.189 84.429);
-  --status-pending-foreground: oklch(0.145 0 0);
-  --status-overdue: oklch(0.577 0.245 27.325);
-  --status-overdue-foreground: oklch(0.985 0 0);
-  --status-vacant: oklch(0.708 0 0);
-  --status-vacant-foreground: oklch(0.985 0 0);
-  --status-occupied: oklch(0.646 0.222 142.495);
-  --status-occupied-foreground: oklch(0.985 0 0);
-  --status-maintenance: oklch(0.769 0.188 70.08);
-  --status-maintenance-foreground: oklch(0.985 0 0);
+  --background: #f4f7fb;
+  --foreground: #0c1d30;
+  --card: #ffffff;
+  --card-foreground: #0c1d30;
+  --popover: #ffffff;
+  --popover-foreground: #0c1d30;
+  --primary: #095bbd;
+  --primary-foreground: #ffffff;
+  --secondary: #eaf4fe;
+  --secondary-foreground: #084b9e;
+  --muted: #eef3f9;
+  --muted-foreground: #5b7086;
+  --accent: #eaf4fe;
+  --accent-foreground: #084b9e;
+  --destructive: #b23a2f;
+  --destructive-foreground: #ffffff;
+  --border: #e2eaf3;
+  --input: #e2eaf3;
+  --ring: #80bcee;
+
+  /* Superfícies auxiliares */
+  --surface-muted: #fafcfe;
+  --hairline: #eef3f9;
+  --neutral-track: #d5dee9;
+
+  /* Semânticos: verde azulado em vez de verde neon, coral maduro no lugar do
+     vermelho puro — ambos passam 4.5:1 sobre branco. */
+  --positive: #0b7a62;
+  --positive-soft: #e3f4ef;
+  --positive-strong: #08604d;
+  --warning: #a05e00;
+  --warning-soft: #fbeedc;
+  --critical: #b23a2f;
+  --critical-soft: #fbe9e6;
+  --critical-strong: #8f2d24;
+
+  /* Séries de gráfico: mesma família, luminâncias distintas. */
+  --chart-1: #095bbd;
+  --chart-2: #2e7ccb;
+  --chart-3: #80bcee;
+  --chart-4: #0b7a62;
+  --chart-5: #9b2fb4;
+  --chart-6: #e2872f;
+
+  --radius: 0.875rem;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #2b4359;
+  --sidebar-primary: #084b9e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaf4fe;
+  --sidebar-accent-foreground: #084b9e;
+  --sidebar-border: #e2eaf3;
+  --sidebar-ring: #80bcee;
+
+  --status-active: #0b7a62;
+  --status-active-foreground: #ffffff;
+  --status-inactive: #5b7086;
+  --status-inactive-foreground: #ffffff;
+  --status-paid: #0b7a62;
+  --status-paid-foreground: #ffffff;
+  --status-pending: #a05e00;
+  --status-pending-foreground: #ffffff;
+  --status-overdue: #b23a2f;
+  --status-overdue-foreground: #ffffff;
+  --status-vacant: #80bcee;
+  --status-vacant-foreground: #0c1d30;
+  --status-occupied: #095bbd;
+  --status-occupied-foreground: #ffffff;
+  --status-maintenance: #a05e00;
+  --status-maintenance-foreground: #ffffff;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.6 0.2 240);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.6 0.2 240);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --brand-50: #10243a;
+  --brand-100: #14314f;
+  --brand-300: #4e97de;
+  --brand-500: #4e97de;
+  --brand-600: #4e97de;
+  --brand-700: #80bcee;
+  --brand-ink: #e8eef6;
 
-  /* Cores de status para modo escuro */
-  --status-active: oklch(0.646 0.222 142.495);
-  --status-active-foreground: oklch(0.985 0 0);
-  --status-inactive: oklch(0.577 0.245 27.325);
-  --status-inactive-foreground: oklch(0.985 0 0);
-  --status-paid: oklch(0.646 0.222 142.495);
-  --status-paid-foreground: oklch(0.985 0 0);
-  --status-pending: oklch(0.828 0.189 84.429);
-  --status-pending-foreground: oklch(0.145 0 0);
-  --status-overdue: oklch(0.577 0.245 27.325);
-  --status-overdue-foreground: oklch(0.985 0 0);
-  --status-vacant: oklch(0.708 0 0);
-  --status-vacant-foreground: oklch(0.985 0 0);
-  --status-occupied: oklch(0.646 0.222 142.495);
-  --status-occupied-foreground: oklch(0.985 0 0);
-  --status-maintenance: oklch(0.769 0.188 70.08);
-  --status-maintenance-foreground: oklch(0.985 0 0);
+  --background: #0b1724;
+  --foreground: #e8eef6;
+  --card: #10202f;
+  --card-foreground: #e8eef6;
+  --popover: #10202f;
+  --popover-foreground: #e8eef6;
+  --primary: #4e97de;
+  --primary-foreground: #06121e;
+  --secondary: #16293b;
+  --secondary-foreground: #cae1f6;
+  --muted: #16293b;
+  --muted-foreground: #9fb3c7;
+  --accent: #16293b;
+  --accent-foreground: #cae1f6;
+  --destructive: #e0796c;
+  --destructive-foreground: #1a0d0b;
+  --border: #1d3145;
+  --input: #1d3145;
+  --ring: #4e97de;
+
+  --surface-muted: #0f1e2c;
+  --hairline: #1d3145;
+  --neutral-track: #2a3d52;
+
+  --positive: #4cbfa2;
+  --positive-soft: #10302a;
+  --positive-strong: #8fdcc7;
+  --warning: #e0a84f;
+  --warning-soft: #33260f;
+  --critical: #e0796c;
+  --critical-soft: #331916;
+  --critical-strong: #f0a79d;
+
+  --chart-1: #4e97de;
+  --chart-2: #80bcee;
+  --chart-3: #caebfd;
+  --chart-4: #4cbfa2;
+  --chart-5: #c06fd4;
+  --chart-6: #e0a84f;
+
+  --sidebar: #10202f;
+  --sidebar-foreground: #c3d3e3;
+  --sidebar-primary: #80bcee;
+  --sidebar-primary-foreground: #06121e;
+  --sidebar-accent: #16293b;
+  --sidebar-accent-foreground: #cae1f6;
+  --sidebar-border: #1d3145;
+  --sidebar-ring: #4e97de;
+
+  --status-active: #4cbfa2;
+  --status-active-foreground: #06121e;
+  --status-inactive: #9fb3c7;
+  --status-inactive-foreground: #06121e;
+  --status-paid: #4cbfa2;
+  --status-paid-foreground: #06121e;
+  --status-pending: #e0a84f;
+  --status-pending-foreground: #06121e;
+  --status-overdue: #e0796c;
+  --status-overdue-foreground: #06121e;
+  --status-vacant: #80bcee;
+  --status-vacant-foreground: #06121e;
+  --status-occupied: #4e97de;
+  --status-occupied-foreground: #06121e;
+  --status-maintenance: #e0a84f;
+  --status-maintenance-foreground: #06121e;
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-jakarta);
+  --font-display: var(--font-bricolage);
   --font-mono: var(--font-geist-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -169,6 +227,27 @@
   --color-status-occupied-foreground: var(--status-occupied-foreground);
   --color-status-maintenance: var(--status-maintenance);
   --color-status-maintenance-foreground: var(--status-maintenance-foreground);
+
+  /* Marca e semânticos expostos como utilitários (bg-brand-600, text-positive…) */
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-300: var(--brand-300);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-ink: var(--brand-ink);
+  --color-surface-muted: var(--surface-muted);
+  --color-hairline: var(--hairline);
+  --color-neutral-track: var(--neutral-track);
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-positive-strong: var(--positive-strong);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-critical-strong: var(--critical-strong);
+  --color-chart-6: var(--chart-6);
 }
 
 @layer base {
@@ -177,6 +256,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
   }
 }
 

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card } from "@/components/ui/card"
+import { MetricRail } from "@/components/ui/metric-rail"
 import { Plus, Search, Grid3X3, List, Users, Edit, Trash2, RefreshCw, AlertTriangle } from "lucide-react"
 import { useTenants } from "@/lib/hooks/useTenants"
 import { TenantDialog } from "@/components/tenants/tenant-dialog"
@@ -235,53 +235,49 @@ export function TenantsView() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inquilinos</h1>
-          <p className="text-gray-600">Gerencie seus inquilinos</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Inquilinos</h1>
+          <p className="text-muted-foreground text-sm">
+            Quem está na carteira e como cada um se relaciona com os imóveis.
+          </p>
         </div>
-        <Button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700">
+        <Button onClick={handleAdd}>
           <Plus className="mr-2 h-4 w-4" />
-          Novo Inquilino
+          Novo inquilino
         </Button>
       </div>
 
-      {/* Status Cards */}
-      <div className="grid gap-3 md:grid-cols-3">
-        <Card className="p-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Total</p>
-              <p className="text-lg font-bold">{statusCounts.total}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-green-600 rounded-full"></div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Ativos</p>
-              <p className="text-lg font-bold">{statusCounts.active}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Inativos</p>
-              <p className="text-lg font-bold">{statusCounts.inactive}</p>
-            </div>
-          </div>
-        </Card>
-      </div>
+      {/* Trilho de métricas: números sem caixa, só contexto para a lista */}
+      <MetricRail
+        lead={{
+          label: "Cadastrados",
+          value: statusCounts.total,
+          unit: statusCounts.total === 1 ? "inquilino" : "inquilinos",
+        }}
+        items={[
+          {
+            label: "Ativos",
+            value: statusCounts.active,
+            dot: "var(--brand-600)",
+          },
+          {
+            label: "Inativos",
+            value: statusCounts.inactive,
+            dot: "var(--neutral-track)",
+          },
+        ]}
+        bar={{
+          segments: [
+            { value: statusCounts.active, color: "var(--brand-600)" },
+            { value: statusCounts.inactive, color: "var(--neutral-track)" },
+          ],
+          caption:
+            statusCounts.total > 0
+              ? `${Math.round((statusCounts.active / statusCounts.total) * 100)}% da base ativa`
+              : undefined,
+        }}
+      />
 
       {/* Search and Filters */}
       <div className="flex items-center gap-4 flex-wrap">

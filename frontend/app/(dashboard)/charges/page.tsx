@@ -4,8 +4,8 @@ export default function ChargesPage() {
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-foreground">Cobranças</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="font-display text-3xl font-bold tracking-tight">Cobranças</h1>
+        <p className="text-muted-foreground mt-1.5 text-sm">
           Aluguéis do mês, recebimentos e saldo devedor de cada inquilino
         </p>
       </div>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Search, Filter, Grid3X3, List, AlertTriangle, RefreshCw } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
+import { CompositionBar } from "@/components/ui/composition-bar"
 import { PropertyCard } from "@/components/properties/property-card"
 import { PropertyList } from "@/components/properties/property-list"
 import { PropertyDialog } from "@/components/properties/property-dialog"
@@ -15,6 +16,7 @@ import { useProperties } from "@/lib/hooks/useProperties"
 import { Property, PropertyDraft, convertApiToProperty, convertPropertyToApi } from "@/lib/types/property"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
+import { formatCurrency } from "@/lib/utils/format"
 
 export function PropertiesView() {
   const { properties, loading, error, refetch, createProperty, updateProperty, deleteProperty } = useProperties()
@@ -33,14 +35,14 @@ export function PropertiesView() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Imóveis</h1>
-            <p className="text-gray-600">Gerencie sua carteira de imóveis</p>
+            <h1 className="font-display text-3xl font-bold tracking-tight">Imóveis</h1>
+            <p className="text-muted-foreground text-sm">Gerencie sua carteira de imóveis</p>
           </div>
         </div>
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-            <p className="text-lg text-gray-600">Carregando propriedades...</p>
+            <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Carregando propriedades...</p>
           </div>
         </div>
       </div>
@@ -53,8 +55,8 @@ export function PropertiesView() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Imóveis</h1>
-            <p className="text-gray-600">Gerencie sua carteira de imóveis</p>
+            <h1 className="font-display text-3xl font-bold tracking-tight">Imóveis</h1>
+            <p className="text-muted-foreground text-sm">Gerencie sua carteira de imóveis</p>
           </div>
         </div>
         <EmptyState
@@ -154,67 +156,55 @@ export function PropertiesView() {
     maintenance: properties.filter((p) => p.status === "maintenance").length,
   }
 
+  // O resto da carteira: inativos e qualquer status que a API venha a enviar e
+  // ainda não tenha fatia própria. Sem esta sobra a barra mentiria, mostrando
+  // 1 ocupado como se fosse 100% do total.
+  const outros =
+    statusCounts.total -
+    statusCounts.occupied -
+    statusCounts.vacant -
+    statusCounts.maintenance
+
+  // Aluguel já contratado = o que os imóveis ocupados rendem por mês.
+  const aluguelContratado = localProperties
+    .filter((p) => p.status === "occupied")
+    .reduce((soma, p) => soma + (p.rent || 0), 0)
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Imóveis</h1>
-          <p className="text-gray-600">Gerencie sua carteira de imóveis</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Imóveis</h1>
+          <p className="text-muted-foreground text-sm">
+            Sua carteira, com a composição atual da ocupação.
+          </p>
         </div>
-        <Button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700">
+        <Button onClick={handleAdd}>
           <Plus className="mr-2 h-4 w-4" />
-          Novo Imóvel
+          Novo imóvel
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card className="p-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Total</p>
-              <p className="text-lg font-bold">{statusCounts.total}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-green-600 rounded-full"></div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Ocupados</p>
-              <p className="text-lg font-bold">{statusCounts.occupied}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Vagos</p>
-              <p className="text-lg font-bold">{statusCounts.vacant}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-              <div className="w-3 h-3 bg-orange-600 rounded-full"></div>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Manutenção</p>
-              <p className="text-lg font-bold">{statusCounts.maintenance}</p>
-            </div>
-          </div>
-        </Card>
-      </div>
+      {/* Composição da carteira — uma superfície no lugar de quatro caixas */}
+      <CompositionBar
+        label="Carteira"
+        total={statusCounts.total}
+        unit={statusCounts.total === 1 ? "imóvel" : "imóveis"}
+        segments={[
+          { label: "Ocupados", value: statusCounts.occupied, color: "var(--brand-600)" },
+          { label: "Vagos", value: statusCounts.vacant, color: "var(--brand-300)" },
+          { label: "Manutenção", value: statusCounts.maintenance, color: "var(--chart-6)" },
+          ...(outros > 0
+            ? [{ label: "Inativos", value: outros, color: "var(--neutral-track)" }]
+            : []),
+        ]}
+        aside={{
+          label: "Aluguel contratado",
+          value: formatCurrency(aluguelContratado),
+          caption: "por mês",
+        }}
+      />
 
       {/* Controls */}
       <div className="flex items-center gap-4">

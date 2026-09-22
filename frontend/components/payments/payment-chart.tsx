@@ -46,9 +46,9 @@ export function PaymentChart() {
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart data={data}>
-        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+        <XAxis dataKey="name" stroke="#5b7086" fontSize={12} tickLine={false} axisLine={false} />
         <YAxis
-          stroke="#888888"
+          stroke="#5b7086"
           fontSize={12}
           tickLine={false}
           axisLine={false}
@@ -59,9 +59,9 @@ export function PaymentChart() {
           labelStyle={{ color: "#000" }}
         />
         <Legend />
-        <Bar dataKey="recebido" name="Recebido" fill="#22c55e" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="pendente" name="Pendente" fill="#eab308" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="atrasado" name="Atrasado" fill="#ef4444" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="recebido" name="Recebido" fill="#0b7a62" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="pendente" name="Pendente" fill="#80bcee" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="atrasado" name="Atrasado" fill="#b23a2f" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )
